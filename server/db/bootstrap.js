@@ -1,14 +1,41 @@
 import { pool } from './pool.js';
+import bcrypt from 'bcryptjs';
 
 const SCHEMA = `
+CREATE TABLE IF NOT EXISTS users (
+  id             SERIAL PRIMARY KEY,
+  email          TEXT NOT NULL UNIQUE,
+  password_hash  TEXT NOT NULL,
+  display_name   TEXT,
+  role           TEXT NOT NULL DEFAULT 'user',
+  totp_secret    TEXT,
+  totp_enabled   BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS sessions (
+  id            TEXT PRIMARY KEY,
+  user_id       INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  mfa_verified  BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  last_seen_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  expires_at    TIMESTAMPTZ NOT NULL
+);
+CREATE INDEX IF NOT EXISTS sessions_user_idx ON sessions(user_id);
+
 CREATE TABLE IF NOT EXISTS designs (
   id          SERIAL PRIMARY KEY,
   name        TEXT NOT NULL,
   description TEXT DEFAULT '',
   graph       JSONB NOT NULL DEFAULT '{"nodes":[],"edges":[]}'::jsonb,
+  owner_id    INTEGER REFERENCES users(id) ON DELETE SET NULL,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Add owner_id on older installs that created designs before users existed
+ALTER TABLE designs ADD COLUMN IF NOT EXISTS owner_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
 
 CREATE TABLE IF NOT EXISTS device_types (
   id               SERIAL PRIMARY KEY,
@@ -56,21 +83,25 @@ CREATE TRIGGER device_types_touch_updated_at
 DROP TRIGGER IF EXISTS zone_types_touch_updated_at ON zone_types;
 CREATE TRIGGER zone_types_touch_updated_at
   BEFORE UPDATE ON zone_types FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
+
+DROP TRIGGER IF EXISTS users_touch_updated_at ON users;
+CREATE TRIGGER users_touch_updated_at
+  BEFORE UPDATE ON users FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
 `;
 
 const SEED_DEVICES = [
-  { key: 'router',        label: 'Router',        icon_key: 'router',        default_inputs: 2, default_outputs: 4, sort_order: 10, description: 'Layer-3 forwarding between networks.' },
-  { key: 'switch',        label: 'Switch',        icon_key: 'switch',        default_inputs: 1, default_outputs: 8, sort_order: 20, description: 'Layer-2 port aggregation for devices on the same VLAN.' },
-  { key: 'firewall',      label: 'Firewall',      icon_key: 'firewall',      default_inputs: 1, default_outputs: 1, sort_order: 30, description: 'Traffic filtering between security zones.' },
-  { key: 'server',        label: 'Server (hardware)', icon_key: 'server',    default_inputs: 1, default_outputs: 1, sort_order: 40, description: 'Bare-metal / physical server hardware.' },
-  { key: 'hypervisor',    label: 'Hypervisor',    icon_key: 'hypervisor',    default_inputs: 1, default_outputs: 1, sort_order: 42, description: 'Virtualization host (ESXi, Hyper-V, KVM, Proxmox).' },
-  { key: 'vm',            label: 'Virtual Machine', icon_key: 'vm',          default_inputs: 1, default_outputs: 1, sort_order: 44, description: 'Guest VM running on a hypervisor.' },
-  { key: 'container',     label: 'Container / Pod', icon_key: 'container',   default_inputs: 1, default_outputs: 1, sort_order: 46, description: 'Containerized workload (Docker, Kubernetes pod).' },
-  { key: 'database',      label: 'Database',      icon_key: 'database',      default_inputs: 1, default_outputs: 0, sort_order: 50, description: 'Persistent data store (RDBMS, NoSQL, object storage).' },
-  { key: 'load-balancer', label: 'Load Balancer', icon_key: 'load-balancer', default_inputs: 1, default_outputs: 4, sort_order: 60, description: 'Distributes traffic across backend pools.' },
-  { key: 'client',        label: 'Client',        icon_key: 'client',        default_inputs: 1, default_outputs: 1, sort_order: 70, description: 'End-user workstation or laptop.' },
-  { key: 'ap',            label: 'Access Point',  icon_key: 'ap',            default_inputs: 1, default_outputs: 4, sort_order: 80, description: 'Wi-Fi access point.' },
-  { key: 'cloud',         label: 'Cloud',         icon_key: 'cloud',         default_inputs: 1, default_outputs: 1, sort_order: 90, description: 'Public cloud region or external SaaS.' },
+  { key: 'router',        label: 'Router',            icon_key: 'router',        default_inputs: 2, default_outputs: 4, sort_order: 10, description: 'Layer-3 forwarding between networks.' },
+  { key: 'switch',        label: 'Switch',            icon_key: 'switch',        default_inputs: 1, default_outputs: 8, sort_order: 20, description: 'Layer-2 port aggregation for devices on the same VLAN.' },
+  { key: 'firewall',      label: 'Firewall',          icon_key: 'firewall',      default_inputs: 1, default_outputs: 1, sort_order: 30, description: 'Traffic filtering between security zones.' },
+  { key: 'server',        label: 'Server (hardware)', icon_key: 'server',        default_inputs: 1, default_outputs: 1, sort_order: 40, description: 'Bare-metal / physical server hardware.' },
+  { key: 'hypervisor',    label: 'Hypervisor',        icon_key: 'hypervisor',    default_inputs: 1, default_outputs: 1, sort_order: 42, description: 'Virtualization host (ESXi, Hyper-V, KVM, Proxmox).' },
+  { key: 'vm',            label: 'Virtual Machine',   icon_key: 'vm',            default_inputs: 1, default_outputs: 1, sort_order: 44, description: 'Guest VM running on a hypervisor.' },
+  { key: 'container',     label: 'Container / Pod',   icon_key: 'container',     default_inputs: 1, default_outputs: 1, sort_order: 46, description: 'Containerized workload (Docker, Kubernetes pod).' },
+  { key: 'database',      label: 'Database',          icon_key: 'database',      default_inputs: 1, default_outputs: 0, sort_order: 50, description: 'Persistent data store (RDBMS, NoSQL, object storage).' },
+  { key: 'load-balancer', label: 'Load Balancer',     icon_key: 'load-balancer', default_inputs: 1, default_outputs: 4, sort_order: 60, description: 'Distributes traffic across backend pools.' },
+  { key: 'client',        label: 'Client',            icon_key: 'client',        default_inputs: 1, default_outputs: 1, sort_order: 70, description: 'End-user workstation or laptop.' },
+  { key: 'ap',            label: 'Access Point',      icon_key: 'ap',            default_inputs: 1, default_outputs: 4, sort_order: 80, description: 'Wi-Fi access point.' },
+  { key: 'cloud',         label: 'Cloud',             icon_key: 'cloud',         default_inputs: 1, default_outputs: 1, sort_order: 90, description: 'Public cloud region or external SaaS.' },
 ];
 
 const SEED_ZONES = [
@@ -100,9 +131,28 @@ async function seed(table, rows) {
   if (inserted > 0) console.log(`[db] inserted ${inserted} new rows into ${table}`);
 }
 
+async function seedInitialAdmin() {
+  const { rows } = await pool.query('SELECT COUNT(*)::int AS n FROM users');
+  if (rows[0].n > 0) return;
+  const email = (process.env.INITIAL_ADMIN_EMAIL || '').trim();
+  const password = process.env.INITIAL_ADMIN_PASSWORD;
+  if (!email || !password) {
+    console.warn('[auth] no users yet. Set INITIAL_ADMIN_EMAIL + INITIAL_ADMIN_PASSWORD to seed the first admin.');
+    return;
+  }
+  const hash = await bcrypt.hash(password, 10);
+  await pool.query(
+    `INSERT INTO users (email, password_hash, display_name, role)
+     VALUES ($1, $2, $3, 'admin')`,
+    [email.toLowerCase(), hash, 'Administrator']
+  );
+  console.log(`[auth] seeded initial admin: ${email}`);
+}
+
 export default async function initSchema() {
   await pool.query(SCHEMA);
   await seed('device_types', SEED_DEVICES);
   await seed('zone_types', SEED_ZONES);
+  await seedInitialAdmin();
   console.log('[db] schema ensured');
 }

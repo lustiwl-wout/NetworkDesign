@@ -1,17 +1,24 @@
 import express from 'express';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import 'dotenv/config';
 import { designsRouter } from './routes/designs.js';
 import { deviceTypesRouter, zoneTypesRouter } from './routes/catalog.js';
+import { authRouter } from './routes/auth.js';
+import { adminUsersRouter } from './routes/adminUsers.js';
+import { attachSession } from './auth/middleware.js';
 import { pool } from './db/pool.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 
-app.use(cors());
+app.set('trust proxy', 1); // secure cookies behind Render's proxy
+app.use(cors({ credentials: true }));
+app.use(cookieParser());
 app.use(express.json({ limit: '2mb' }));
+app.use(attachSession);
 
 app.get('/api/health', async (_req, res) => {
   try {
@@ -22,6 +29,8 @@ app.get('/api/health', async (_req, res) => {
   }
 });
 
+app.use('/api/auth', authRouter);
+app.use('/api/admin/users', adminUsersRouter);
 app.use('/api/designs', designsRouter);
 app.use('/api/device-types', deviceTypesRouter);
 app.use('/api/zone-types', zoneTypesRouter);

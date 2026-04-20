@@ -14,9 +14,12 @@ import ZoneNode from './ZoneNode.jsx';
 import DeviceIcon from './DeviceIcons.jsx';
 import AdminPortal from './AdminPortal.jsx';
 import DesignsPage from './DesignsPage.jsx';
+import LoginPage from './LoginPage.jsx';
+import ProfilePage from './ProfilePage.jsx';
 import { TEMPLATES } from './templates/index.js';
 import { api } from './api.js';
 import { deviceTypesApi, zoneTypesApi } from './catalogApi.js';
+import { authApi } from './authApi.js';
 import { EDGE_KINDS, EDGE_KINDS_BY_KEY, applyKind } from './edgePresets.js';
 import { exportCanvasPng } from './exportImage.js';
 
@@ -33,7 +36,7 @@ function styleEdges(edges) {
   });
 }
 
-function Editor() {
+function Editor({ me }) {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [deviceTypes, setDeviceTypes] = useState([]);
@@ -328,7 +331,12 @@ function Editor() {
         <button className="btn secondary" onClick={exportPng}>Export PNG</button>
         <button className="btn" onClick={saveDesign}>Save</button>
         {currentId && <button className="btn danger" onClick={deleteDesign}>Delete</button>}
-        <a className="btn secondary" href="/admin" title="Admin portal">⚙︎ Admin</a>
+        {me?.role === 'admin' && (
+          <a className="btn secondary" href="/admin" title="Admin portal">⚙︎ Admin</a>
+        )}
+        <a className="btn secondary" href="/profile" title={me?.email}>
+          {me?.displayName || me?.email?.split('@')[0] || 'Profile'}
+        </a>
       </div>
 
       <aside className="palette">
@@ -378,6 +386,7 @@ function Editor() {
           nodeTypes={nodeTypes}
           fitView
           deleteKeyCode={['Backspace', 'Delete']}
+          defaultEdgeOptions={{ type: 'smoothstep', pathOptions: { borderRadius: 12 } }}
         >
           <Background gap={16} size={1} color="#334155" />
           <Controls />
@@ -643,12 +652,59 @@ function EdgeInspector({ edge, mode, onChange, onKindChange, onDelete }) {
 }
 
 function Root() {
+  const [me, setMe] = useState(undefined); // undefined = loading, null = unauthed
   const path = typeof window !== 'undefined' ? window.location.pathname : '/';
-  if (path.startsWith('/admin')) return <AdminPortal />;
+
+  const refreshMe = useCallback(async () => {
+    try { setMe(await authApi.me()); }
+    catch (e) { if (e.status === 401) setMe(null); else console.error(e); }
+  }, []);
+
+  useEffect(() => { refreshMe(); }, [refreshMe]);
+
+  if (me === undefined) {
+    return <div className="auth-shell"><div className="hint">Loading…</div></div>;
+  }
+
+  if (!me || !me.user || me.mfaRequired) {
+    return (
+      <LoginPage
+        mode={path === '/register' ? 'register' : 'login'}
+        initialMfa={!!me?.mfaRequired}
+        onAuthed={refreshMe}
+      />
+    );
+  }
+
+  if (path.startsWith('/admin')) {
+    if (me.user.role !== 'admin') return <Forbidden me={me.user} />;
+    return <AdminPortal />;
+  }
+  if (path.startsWith('/profile')) {
+    return <ProfilePage me={me.user} onChange={refreshMe} />;
+  }
+  if (path.startsWith('/designs')) {
+    return <DesignsPage me={me.user} />;
+  }
+
   return (
     <ReactFlowProvider>
-      <Editor />
+      <Editor me={me.user} />
     </ReactFlowProvider>
+  );
+}
+
+function Forbidden({ me }) {
+  return (
+    <div className="auth-shell">
+      <div className="auth-card">
+        <h1>Admin only</h1>
+        <p className="hint">
+          Your account ({me.email}) doesn't have access to this page.
+        </p>
+        <a className="btn" href="/">← Back to editor</a>
+      </div>
+    </div>
   );
 }
 

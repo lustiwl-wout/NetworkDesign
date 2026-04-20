@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import DeviceIcon, { ICON_KEYS } from './DeviceIcons.jsx';
 import { deviceTypesApi, zoneTypesApi } from './catalogApi.js';
+import UsersAdmin from './UsersAdmin.jsx';
 
 const BLANK_DEVICE = {
   key: '',
@@ -30,7 +31,7 @@ export default function AdminPortal() {
   return (
     <div className="admin">
       <header className="admin-topbar">
-        <h1>Admin — Catalog</h1>
+        <h1>Admin</h1>
         <nav>
           <button
             className={`tab${tab === 'devices' ? ' active' : ''}`}
@@ -40,13 +41,19 @@ export default function AdminPortal() {
             className={`tab${tab === 'zones' ? ' active' : ''}`}
             onClick={() => setTab('zones')}
           >Zones</button>
+          <button
+            className={`tab${tab === 'users' ? ' active' : ''}`}
+            onClick={() => setTab('users')}
+          >Users</button>
         </nav>
         <div className="spacer" />
         <a className="btn secondary" href="/">← Back to editor</a>
       </header>
 
       <main className="admin-main">
-        {tab === 'devices' ? <DeviceAdmin /> : <ZoneAdmin />}
+        {tab === 'devices' && <DeviceAdmin />}
+        {tab === 'zones'   && <ZoneAdmin />}
+        {tab === 'users'   && <UsersAdmin />}
       </main>
     </div>
   );

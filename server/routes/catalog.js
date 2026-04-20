@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { pool } from '../db/pool.js';
+import { requireAuth, requireAdmin } from '../auth/middleware.js';
 
 function camel(row) {
   if (!row) return row;
@@ -14,7 +15,7 @@ const toSnake = (k) => k.replace(/([A-Z])/g, '_$1').toLowerCase();
 export function catalogRouter({ table, allowedFields, required }) {
   const router = Router();
 
-  router.get('/', async (_req, res, next) => {
+  router.get('/', requireAuth, async (_req, res, next) => {
     try {
       const { rows } = await pool.query(
         `SELECT * FROM ${table} ORDER BY sort_order ASC, label ASC`
@@ -23,7 +24,7 @@ export function catalogRouter({ table, allowedFields, required }) {
     } catch (err) { next(err); }
   });
 
-  router.get('/:id', async (req, res, next) => {
+  router.get('/:id', requireAuth, async (req, res, next) => {
     try {
       const { rows } = await pool.query(`SELECT * FROM ${table} WHERE id = $1`, [req.params.id]);
       if (!rows.length) return res.status(404).json({ error: 'Not found' });
@@ -31,7 +32,7 @@ export function catalogRouter({ table, allowedFields, required }) {
     } catch (err) { next(err); }
   });
 
-  router.post('/', async (req, res, next) => {
+  router.post('/', requireAdmin, async (req, res, next) => {
     try {
       const body = req.body ?? {};
       for (const f of required) {
@@ -54,7 +55,7 @@ export function catalogRouter({ table, allowedFields, required }) {
     }
   });
 
-  router.put('/:id', async (req, res, next) => {
+  router.put('/:id', requireAdmin, async (req, res, next) => {
     try {
       const body = req.body ?? {};
       const cols = Object.keys(body).filter((k) => allowedFields.includes(k));
@@ -72,7 +73,7 @@ export function catalogRouter({ table, allowedFields, required }) {
     }
   });
 
-  router.delete('/:id', async (req, res, next) => {
+  router.delete('/:id', requireAdmin, async (req, res, next) => {
     try {
       const { rowCount } = await pool.query(`DELETE FROM ${table} WHERE id = $1`, [req.params.id]);
       if (!rowCount) return res.status(404).json({ error: 'Not found' });
