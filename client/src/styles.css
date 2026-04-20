@@ -170,6 +170,60 @@ html, body, #root {
   font-weight: 600;
 }
 
+.btn.secondary.active {
+  background: var(--accent);
+  color: #081824;
+  border-color: var(--accent);
+}
+
+.debug-hud {
+  position: absolute;
+  top: 60px;
+  left: 16px;
+  background: rgba(15, 23, 42, 0.92);
+  border: 1px solid #f59e0b;
+  color: #e2e8f0;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  min-width: 220px;
+  z-index: 50;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.5);
+}
+.debug-hud-title {
+  font-weight: 700;
+  color: #fbbf24;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  font-size: 10px;
+  margin-bottom: 6px;
+}
+.debug-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+.debug-row strong { color: #f1f5f9; }
+.debug-legend {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 10px;
+}
+.debug-hud details {
+  margin-top: 8px;
+  font-size: 10.5px;
+}
+.debug-hud details summary { cursor: pointer; color: #fbbf24; }
+.debug-hud details ul {
+  padding-left: 16px;
+  margin: 4px 0 0;
+  max-height: 200px;
+  overflow-y: auto;
+}
+.debug-hud code { color: #93c5fd; }
+
 .canvas {
   grid-area: canvas;
   position: relative;

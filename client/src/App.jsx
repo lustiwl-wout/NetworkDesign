@@ -13,6 +13,7 @@ import NetworkNode from './NetworkNode.jsx';
 import ZoneNode from './ZoneNode.jsx';
 import AnnotationNode from './AnnotationNode.jsx';
 import SmartEdge from './SmartEdge.jsx';
+import DebugOverlay from './DebugOverlay.jsx';
 import DeviceIcon, { ICON_META } from './DeviceIcons.jsx';
 import AdminPortal from './AdminPortal.jsx';
 import DesignsPage from './DesignsPage.jsx';
@@ -68,6 +69,7 @@ function Editor({ me }) {
   const [toast, setToast] = useState(null);
   const [templateOpen, setTemplateOpen] = useState(false);
   const [present, setPresent] = useState(false);
+  const [debug, setDebug] = useState(false);
   const [phaseFilter, setPhaseFilter] = useState(null); // null = show all
   const [narrative, setNarrative] = useState({});
   const [caseOpen, setCaseOpen] = useState(false);
@@ -476,6 +478,13 @@ function Editor({ me }) {
         <button className="btn secondary" onClick={() => setPresent(true)} title="Enter presentation mode (Esc to exit)">
           ▶ Present
         </button>
+        <button
+          className={`btn secondary${debug ? ' active' : ''}`}
+          onClick={() => setDebug((v) => !v)}
+          title="Toggle routing / layout debug overlay"
+        >
+          🐞 Debug
+        </button>
         <button className="btn" onClick={saveDesign}>Save</button>
         {currentId && <button className="btn danger" onClick={deleteDesign}>Delete</button>}
         {me?.role === 'admin' && (
@@ -558,6 +567,7 @@ function Editor({ me }) {
           <Background gap={16} size={1} color="#334155" />
           <Controls />
           <MiniMap pannable zoomable maskColor="rgba(15,23,42,0.6)" />
+          {debug && <DebugOverlay />}
         </ReactFlow>
         {summary.deviceCount > 0 && summary.inputCount === 0 && (
           <div className="validation-banner" role="status">
