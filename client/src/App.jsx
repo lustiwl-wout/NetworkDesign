@@ -29,6 +29,23 @@ let tmpId = 1;
 const nextId = () => `n_${Date.now().toString(36)}_${tmpId++}`;
 const cloneGraph = (g) => JSON.parse(JSON.stringify(g));
 
+// Find the zone node whose rectangle contains the given flow position,
+// so dropped devices can auto-parent to it.
+function findContainingZone(nodes, pos) {
+  for (const n of nodes) {
+    if (n.type !== 'zone') continue;
+    const w = n.style?.width  ?? n.width  ?? 0;
+    const h = n.style?.height ?? n.height ?? 0;
+    if (
+      pos.x >= n.position.x && pos.x <= n.position.x + w &&
+      pos.y >= n.position.y && pos.y <= n.position.y + h
+    ) {
+      return n;
+    }
+  }
+  return null;
+}
+
 function styleEdges(edges) {
   return edges.map((e) => {
     const kind = e.data?.kind ?? 'network';
@@ -114,10 +131,19 @@ function Editor({ me }) {
       if (kind === 'device') {
         const d = deviceByKey[value];
         if (!d) return;
+        // If the drop point is inside a zone, parent the device to that zone
+        // and make the position relative to the zone's top-left. extent:
+        // 'parent' then prevents it from being dragged outside.
+        const parent = findContainingZone(nodes, position);
+        const relPos = parent
+          ? { x: position.x - parent.position.x, y: position.y - parent.position.y }
+          : position;
+
         setNodes((nds) => nds.concat({
           id: nextId(),
           type: 'device',
-          position,
+          position: relPos,
+          ...(parent ? { parentNode: parent.id, extent: 'parent' } : {}),
           data: {
             iconKey: d.iconKey,
             label: d.label,
@@ -145,7 +171,7 @@ function Editor({ me }) {
         ]);
       }
     },
-    [screenToFlowPosition, setNodes, deviceByKey, zoneByKey]
+    [screenToFlowPosition, setNodes, deviceByKey, zoneByKey, nodes]
   );
 
   const onPaletteDragStart = (event, kind, value) => {

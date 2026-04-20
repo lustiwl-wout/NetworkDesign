@@ -1,64 +1,76 @@
-import { device, zone, edge } from './_shared.js';
+import { device, zone, edge, zoneSize } from './_shared.js';
+
+const Z = {
+  front: zoneSize(3, 2),
+  back:  zoneSize(3, 1),
+  wan:   zoneSize(2, 2),
+  mgmt:  zoneSize(2, 1),
+};
+
+const GAP = 40;
+const Z_FRONT = { x: 0, y: 0 };
+const Z_BACK  = { x: 0, y: Z.front.height + GAP };
+const Z_WAN   = { x: Z.front.width + GAP, y: 0 };
+const Z_MGMT  = { x: Z.front.width + GAP, y: Z.wan.height + GAP };
 
 export default {
   id: 'branch-shop',
   name: 'Branch Shop / Trade Counter',
   description:
-    'Local trade counter for walk-in customers and pickup. Lean footprint: POS, counter workstations, Wi-Fi, CCTV. Connectivity: MPLS (primary) · SD-WAN (optional) · 5G (backup). All business logic lives at HQ; this site is stateless.',
+    'Local trade counter for walk-in customers and pickup. Lean footprint: POS, counter workstations, Wi-Fi, CCTV. Connectivity: MPLS (primary), 5G (backup). Stateless — ERP and stock live at HQ.',
   graph: {
     nodes: [
-      zone('z-front',  0,   0,   520, 320, { color: '#3b82f6', label: 'Shop Floor',  sublabel: 'Counter + customer area' }),
-      zone('z-back',   0,   340, 520, 240, { color: '#06b6d4', label: 'Back Office',  sublabel: 'Staff / stockroom' }),
-      zone('z-wan',    560, 0,   400, 420, { color: '#f59e0b', label: 'WAN Edge',     sublabel: 'Link to HQ / DC' }),
-      zone('z-mgmt',   560, 440, 400, 200, { color: '#94a3b8', label: 'Management' }),
+      zone('z-front', Z_FRONT.x, Z_FRONT.y, Z.front.width, Z.front.height,
+        { color: '#3b82f6', label: 'Shop Floor',  sublabel: 'Counter + customer area' }),
+      zone('z-back',  Z_BACK.x,  Z_BACK.y,  Z.back.width,  Z.back.height,
+        { color: '#06b6d4', label: 'Back Office', sublabel: 'Staff / stockroom' }),
+      zone('z-wan',   Z_WAN.x,   Z_WAN.y,   Z.wan.width,   Z.wan.height,
+        { color: '#f59e0b', label: 'WAN Edge',     sublabel: 'Link to HQ / DC' }),
+      zone('z-mgmt',  Z_MGMT.x,  Z_MGMT.y,  Z.mgmt.width,  Z.mgmt.height,
+        { color: '#94a3b8', label: 'Management' }),
 
-      // Shop floor
-      device('sh-sw',      'switch', 60,  60,  { label: 'Shop Switch',     inputs: 2, outputs: 8 }),
-      device('sh-pos1',    'client', 240, 60,  { label: 'POS Terminal 1' }),
-      device('sh-pos2',    'client', 380, 60,  { label: 'POS Terminal 2' }),
-      device('sh-kiosk',   'client', 60,  200, { label: 'Self-service Kiosk', capacity: 'Stock lookup · order pickup' }),
-      device('sh-ap-pub',  'ap',     240, 200, { label: 'Wi-Fi (customer)',    capacity: 'Guest SSID' }),
-      device('sh-cctv',    'client', 380, 200, { label: 'CCTV' }),
+      // Shop floor (3x2)
+      device('sh-sw',     'switch', 'z-front', 0, 0, { label: 'Shop Switch',    inputs: 2, outputs: 8 }),
+      device('sh-pos1',   'client', 'z-front', 1, 0, { label: 'POS Terminal 1' }),
+      device('sh-pos2',   'client', 'z-front', 2, 0, { label: 'POS Terminal 2' }),
+      device('sh-kiosk',  'client', 'z-front', 0, 1, { label: 'Self-service Kiosk', capacity: 'Stock lookup · pickup' }),
+      device('sh-ap-pub', 'ap',     'z-front', 1, 1, { label: 'Wi-Fi (customer)',   capacity: 'Guest SSID' }),
+      device('sh-cctv',   'client', 'z-front', 2, 1, { label: 'CCTV' }),
 
-      // Back office
-      device('sh-ap-staff','ap',     60,  380, { label: 'Wi-Fi (staff)' }),
-      device('sh-pickup',  'client', 240, 380, { label: 'Pickup Locker' }),
-      device('sh-print',   'server', 380, 380, { label: 'Label / Receipt Printer' }),
-      device('sh-phone',   'client', 60,  500, { label: 'VoIP Handset' }),
-      device('sh-office',  'client', 240, 500, { label: 'Counter Workstation' }),
+      // Back office (3x1)
+      device('sh-ap-staff','ap',     'z-back', 0, 0, { label: 'Wi-Fi (staff)' }),
+      device('sh-pickup',  'client', 'z-back', 1, 0, { label: 'Pickup Locker' }),
+      device('sh-print',   'server', 'z-back', 2, 0, { label: 'Label / Receipt Printer' }),
 
-      // WAN edge
-      device('sh-fw',      'firewall', 620, 40,  { label: 'Branch Firewall' }),
-      device('sh-mpls',    'router',   780, 40,  { label: 'MPLS Edge',     capacity: 'Primary · to HQ / DC', phase: 'Primary',  inputs: 1, outputs: 2 }),
-      device('sh-sdwan',   'router',   620, 160, { label: 'SD-WAN Edge',   capacity: 'Overlay · Break-out',  phase: 'Optional', inputs: 1, outputs: 2 }),
-      device('sh-5g',      'ap',       780, 160, { label: '5G WAN Gateway',capacity: 'Backup transport',     phase: 'Backup' }),
-      device('sh-hq',      'cloud',    700, 300, { label: 'To HQ / DC',     capacity: 'ERP, stock, identity' }),
+      // WAN edge (2x2)
+      device('sh-fw',   'firewall', 'z-wan', 0, 0, { label: 'Branch Firewall' }),
+      device('sh-hq',   'cloud',    'z-wan', 1, 0, { label: 'To HQ / DC',      capacity: 'ERP, stock, identity' }),
+      device('sh-mpls', 'router',   'z-wan', 0, 1, { label: 'MPLS Edge',        capacity: 'Primary · to HQ / DC', phase: 'Primary' }),
+      device('sh-5g',   'ap',       'z-wan', 1, 1, { label: '5G WAN Gateway',   capacity: 'Backup transport',      phase: 'Backup' }),
 
-      // Management
-      device('sh-monitor', 'server', 620, 480, { label: 'Monitoring Agent' }),
-      device('sh-jump',    'server', 780, 480, { label: 'Remote Support (via HQ)' }),
+      // Management (2x1)
+      device('sh-monitor', 'server', 'z-mgmt', 0, 0, { label: 'Monitoring Agent' }),
+      device('sh-jump',    'server', 'z-mgmt', 1, 0, { label: 'Remote Support (via HQ)' }),
     ],
     edges: [
-      // LAN
-      edge('s1', 'sh-pos1',     'sh-sw', 'network'),
-      edge('s2', 'sh-pos2',     'sh-sw', 'network'),
-      edge('s3', 'sh-kiosk',    'sh-sw', 'network'),
-      edge('s4', 'sh-ap-pub',   'sh-sw', 'network'),
-      edge('s5', 'sh-cctv',     'sh-sw', 'network'),
-      edge('s6', 'sh-ap-staff', 'sh-sw', 'network'),
-      edge('s7', 'sh-pickup',   'sh-sw', 'network'),
-      edge('s8', 'sh-print',    'sh-sw', 'network'),
-      edge('s9', 'sh-phone',    'sh-sw', 'network'),
-      edge('s10','sh-office',   'sh-sw', 'network'),
+      // Shop LAN
+      edge('s1', 'sh-pos1',    'sh-sw', 'network'),
+      edge('s2', 'sh-pos2',    'sh-sw', 'network'),
+      edge('s3', 'sh-kiosk',   'sh-sw', 'network'),
+      edge('s4', 'sh-ap-pub',  'sh-sw', 'network'),
+      edge('s5', 'sh-cctv',    'sh-sw', 'network'),
 
-      // LAN → Firewall → WAN transports (all three fan out from the firewall)
-      edge('w1', 'sh-sw',    'sh-fw',    'network'),
-      edge('w2', 'sh-fw',    'sh-mpls',  'wan',     { label: 'Primary · MPLS' }),
-      edge('w3', 'sh-fw',    'sh-sdwan', 'network', { label: 'Optional · SD-WAN' }),
-      edge('w4', 'sh-fw',    'sh-5g',    'wan',     { label: 'Backup · 5G' }),
-      edge('w5', 'sh-mpls',  'sh-hq',    'wan',     { label: 'Private circuit' }),
-      edge('w6', 'sh-sdwan', 'sh-hq',    'wan',     { label: 'Overlay' }),
-      edge('w7', 'sh-5g',    'sh-hq',    'wan',     { label: 'Failover' }),
+      // Back office
+      edge('b1', 'sh-ap-staff','sh-sw', 'network'),
+      edge('b2', 'sh-pickup',  'sh-sw', 'network'),
+      edge('b3', 'sh-print',   'sh-sw', 'network'),
+
+      // LAN → Firewall → transports (no SD-WAN)
+      edge('w1', 'sh-sw',   'sh-fw',   'network'),
+      edge('w2', 'sh-fw',   'sh-mpls', 'wan', { label: 'Primary · MPLS' }),
+      edge('w3', 'sh-fw',   'sh-5g',   'wan', { label: 'Backup · 5G' }),
+      edge('w4', 'sh-mpls', 'sh-hq',   'wan', { label: 'Private circuit' }),
+      edge('w5', 'sh-5g',   'sh-hq',   'wan', { label: 'Failover' }),
 
       // Management
       edge('m1', 'sh-monitor', 'sh-mpls', 'logs',       { label: 'Telemetry' }),
