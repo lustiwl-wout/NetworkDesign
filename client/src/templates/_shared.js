@@ -51,8 +51,7 @@ export const edge = (id, source, target, kind = 'network', extras = {}) => ({
   target,
   sourceHandle: 'out-0',
   targetHandle: 'in-0',
-  type: 'smoothstep',
-  pathOptions: { borderRadius: 12 },
+  type: 'smart',
   data: { kind },
   ...extras,
 });

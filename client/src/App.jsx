@@ -9,6 +9,7 @@ import ReactFlow, {
   useNodesState,
   useReactFlow,
 } from 'reactflow';
+import { SmartStepEdge } from '@tisoap/react-flow-smart-edge';
 import NetworkNode from './NetworkNode.jsx';
 import ZoneNode from './ZoneNode.jsx';
 import AnnotationNode from './AnnotationNode.jsx';
@@ -25,6 +26,7 @@ import { EDGE_KINDS, EDGE_KINDS_BY_KEY, applyKind } from './edgePresets.js';
 import { exportCanvasPng } from './exportImage.js';
 
 const nodeTypes = { device: NetworkNode, zone: ZoneNode, annotation: AnnotationNode };
+const edgeTypes = { smart: SmartStepEdge };
 
 let tmpId = 1;
 const nextId = () => `n_${Date.now().toString(36)}_${tmpId++}`;
@@ -456,9 +458,10 @@ function Editor({ me }) {
           onEdgeClick={(_, edge) => { setSelectedEdge(edge); setSelectedNode(null); }}
           onPaneClick={() => { setSelectedNode(null); setSelectedEdge(null); setTemplateOpen(false); }}
           nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
           fitView
           deleteKeyCode={['Backspace', 'Delete']}
-          defaultEdgeOptions={{ type: 'smoothstep', pathOptions: { borderRadius: 12 } }}
+          defaultEdgeOptions={{ type: 'smart' }}
         >
           <Background gap={16} size={1} color="#334155" />
           <Controls />
