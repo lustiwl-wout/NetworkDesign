@@ -1,20 +1,21 @@
 import { useMemo } from 'react';
-import { BaseEdge, useStore, getSmoothStepPath, EdgeLabelRenderer, Position } from 'reactflow';
+import { useStore, getSmoothStepPath, EdgeLabelRenderer, Position } from 'reactflow';
 import {
   getSmartEdge,
   pathfindingAStarNoDiagonal,
-  svgDrawSmoothLinePath,
+  svgDrawStraightLinePath,
 } from '@tisoap/react-flow-smart-edge';
 
-// Floating smart edge:
-//   1. Endpoints float to the closest side of each device (we ignore any
-//      sourceHandle / targetHandle on the edge). Devices can therefore
-//      connect from any side without the author picking a port.
-//   2. Routes around *device* obstacles only — zones and annotations
-//      are transparent to the router.
-//   3. Generous nodePadding so paths don't hug device icons.
+// Strict orthogonal routing:
+//   - Endpoints float to the closest side of each device.
+//   - Every OTHER device is a hard obstacle with a padding ring. A*
+//     routes around them on an orthogonal grid.
+//   - If no route can be found (layout too tight), we draw a visibly
+//     broken warning edge instead of silently cutting through a device.
+//   - Zones and annotations are transparent to the router.
 
-const OBSTACLE_PAD = 28;
+const OBSTACLE_PAD = 30;
+const GRID_RATIO = 4;
 
 const selectNodes = (s) => s.nodeInternals;
 
@@ -26,23 +27,21 @@ export default function SmartEdge(props) {
   const sourceNode = nodeInternals.get(source);
   const targetNode = nodeInternals.get(target);
 
+  // Obstacles: every measured device EXCEPT the edge's own endpoints.
+  // The router can't find a path if its start/end points sit inside a
+  // walled-off node.
   const obstacles = useMemo(() => {
     const list = [];
     for (const n of nodeInternals.values()) {
       if (n.type !== 'device') continue;
+      if (n.id === source || n.id === target) continue;
       if (!n.width || !n.height) continue;
       const p = n.positionAbsolute ?? n.position;
-      list.push({
-        ...n,
-        position: p,
-        parentNode: undefined,
-      });
+      list.push({ ...n, position: p, parentNode: undefined });
     }
     return list;
-  }, [nodeInternals]);
+  }, [nodeInternals, source, target]);
 
-  // If either node isn't yet in the store (initial frame), don't render —
-  // React Flow will re-render once they're available.
   if (!sourceNode || !targetNode) return null;
 
   const { sx, sy, tx, ty, sourcePosition, targetPosition } =
@@ -54,26 +53,51 @@ export default function SmartEdge(props) {
     nodes: obstacles,
     options: {
       nodePadding: OBSTACLE_PAD,
-      gridRatio: 6,
+      gridRatio: GRID_RATIO,
       generatePath: pathfindingAStarNoDiagonal,
-      drawEdge: svgDrawSmoothLinePath,
+      drawEdge: svgDrawStraightLinePath,
     },
   });
 
-  // Fallback: smoothstep if the router fails
-  const path = smart?.svgPathString ??
-    getSmoothStepPath({
+  // Routing failed — show a clearly broken edge so the user knows the
+  // layout needs more room, instead of silently cutting through devices.
+  if (smart === null) {
+    const [p, lx, ly] = getSmoothStepPath({
       sourceX: sx, sourceY: sy, targetX: tx, targetY: ty,
-      sourcePosition, targetPosition, borderRadius: 12,
-    })[0];
-  const labelX = smart?.edgeCenterX ?? (sx + tx) / 2;
-  const labelY = smart?.edgeCenterY ?? (sy + ty) / 2;
+      sourcePosition, targetPosition, borderRadius: 8,
+    });
+    return (
+      <>
+        <path
+          id={id}
+          d={p}
+          fill="none"
+          style={{
+            ...style,
+            stroke: '#ef4444',
+            strokeWidth: 1.5,
+            strokeDasharray: '2 4',
+            opacity: 0.8,
+          }}
+          markerEnd={markerEnd}
+        />
+        <EdgeLabelRenderer>
+          <div className="react-flow__edge-label-floating edge-warning"
+            style={{ transform: `translate(-50%, -50%) translate(${lx}px, ${ly}px)` }}>
+            ⚠︎ no route — add space between devices
+          </div>
+        </EdgeLabelRenderer>
+      </>
+    );
+  }
+
+  const { svgPathString, edgeCenterX, edgeCenterY } = smart;
 
   return (
     <>
       <path
         id={id}
-        d={path}
+        d={svgPathString}
         fill="none"
         className={`react-flow__edge-path${animated ? ' animated' : ''}`}
         style={style}
@@ -82,7 +106,7 @@ export default function SmartEdge(props) {
       {label && (
         <EdgeLabelRenderer>
           <div className="react-flow__edge-label-floating"
-            style={{ transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)` }}>
+            style={{ transform: `translate(-50%, -50%) translate(${edgeCenterX}px, ${edgeCenterY}px)` }}>
             {label}
           </div>
         </EdgeLabelRenderer>
@@ -106,8 +130,6 @@ function getFloatingEdgeParams(source, target) {
   };
 }
 
-// Intersection of the line from `source` centre to `target` centre with
-// `source`'s bounding rectangle. Returns the point on `source`'s border.
 function getNodeIntersection(source, target) {
   const sp = source.positionAbsolute ?? source.position;
   const tp = target.positionAbsolute ?? target.position;

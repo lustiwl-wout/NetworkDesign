@@ -438,6 +438,12 @@ html, body, #root {
   border-radius: 4px;
   white-space: nowrap;
 }
+.react-flow__edge-label-floating.edge-warning {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: #ef4444;
+  color: #fecaca;
+  font-weight: 600;
+}
 
 /* Animated edge keyframe (React Flow's built-in .animated class re-asserted) */
 .react-flow__edge-path.animated {
