@@ -2,7 +2,7 @@ import { device, zone, edge, zoneSize } from './_shared.js';
 
 const Z = {
   prod:   zoneSize(2, 2),
-  airgap: zoneSize(1, 2),
+  airgap: zoneSize(1, 3),
   ire:    zoneSize(3, 2),
   mgmt:   zoneSize(2, 1),
 };
@@ -35,8 +35,11 @@ export default {
       device('prod-sw',     'switch',   'zone-prod', 0, 1, { label: 'Core Switch',                           risk: 'medium', phase: 'Current' }),
       device('prod-backup', 'server',   'zone-prod', 1, 1, { label: 'Backup Source',    capacity: 'Proxy / media', risk: 'medium', phase: 'Current' }),
 
-      // Air-gap (1x2): a single repeater to anchor the replication edge
-      device('air-relay',   'cloud',    'zone-airgap', 0, 0, { label: 'One-way Diode', capacity: 'Scheduled', phase: 'Current' }),
+      // Air-gap (1x2): a single repeater to anchor the replication edge.
+      // Marked as an input boundary — the IRE has exactly one ingress
+      // (backups) and, by design, no egress.
+      device('air-in',     'boundary-input', 'zone-airgap', 0, 0, { label: 'Replication Ingress', capacity: 'Scheduled only', phase: 'Current' }),
+      device('air-relay',  'cloud',          'zone-airgap', 0, 1, { label: 'One-way Diode',        capacity: 'Scheduled',      phase: 'Current' }),
 
       // IRE (3x2)
       device('ire-fw',       'firewall', 'zone-ire', 0, 0, { label: 'Vault Firewall',        capacity: 'Ingress-only', risk: 'low', phase: 'Proposed' }),
@@ -54,7 +57,8 @@ export default {
       edge('e2', 'prod-app', 'prod-sw', 'network'),
       edge('e3', 'prod-sw',  'prod-backup', 'network'),
 
-      edge('e-airgap', 'prod-backup', 'air-relay', 'replication', { label: 'One-way replication' }),
+      edge('e-airgap', 'prod-backup', 'air-in',    'replication', { label: 'One-way replication' }),
+      edge('e-relay',  'air-in',      'air-relay', 'replication'),
       edge('e-ire-in', 'air-relay',   'ire-fw',    'replication'),
 
       edge('e4', 'ire-fw', 'ire-sw',        'network'),

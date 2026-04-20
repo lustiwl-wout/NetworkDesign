@@ -3,7 +3,7 @@ import { device, zone, edge, zoneSize } from './_shared.js';
 const Z = {
   front: zoneSize(3, 2),
   back:  zoneSize(3, 1),
-  wan:   zoneSize(2, 2),
+  wan:   zoneSize(3, 2),
   mgmt:  zoneSize(2, 1),
 };
 
@@ -42,11 +42,13 @@ export default {
       device('sh-pickup',  'client', 'z-back', 1, 0, { label: 'Pickup Locker' }),
       device('sh-print',   'server', 'z-back', 2, 0, { label: 'Label / Receipt Printer' }),
 
-      // WAN edge (2x2)
-      device('sh-fw',   'firewall', 'z-wan', 0, 0, { label: 'Branch Firewall' }),
-      device('sh-hq',   'cloud',    'z-wan', 1, 0, { label: 'To HQ / DC',      capacity: 'ERP, stock, identity' }),
-      device('sh-mpls', 'router',   'z-wan', 0, 1, { label: 'MPLS Edge',        capacity: 'Primary · to HQ / DC', phase: 'Primary' }),
-      device('sh-5g',   'ap',       'z-wan', 1, 1, { label: '5G WAN Gateway',   capacity: 'Backup transport',      phase: 'Backup' }),
+      // WAN edge (3x2) with input + output boundaries linking to HQ / DC
+      device('sh-in',   'boundary-input',  'z-wan', 0, 0, { label: 'From HQ / DC',   capacity: 'ERP, stock, identity', phase: 'Current' }),
+      device('sh-fw',   'firewall',        'z-wan', 1, 0, { label: 'Branch Firewall' }),
+      device('sh-out',  'boundary-output', 'z-wan', 2, 0, { label: 'To Customers',    capacity: 'POS lookups / pickup', phase: 'Current' }),
+      device('sh-mpls', 'router',          'z-wan', 0, 1, { label: 'MPLS Edge',       capacity: 'Primary · to HQ / DC', phase: 'Primary' }),
+      device('sh-hq',   'cloud',           'z-wan', 1, 1, { label: 'HQ / DC Fabric',  capacity: 'Central services' }),
+      device('sh-5g',   'ap',              'z-wan', 2, 1, { label: '5G WAN Gateway',  capacity: 'Backup transport',      phase: 'Backup' }),
 
       // Management (2x1)
       device('sh-monitor', 'server', 'z-mgmt', 0, 0, { label: 'Monitoring Agent' }),
@@ -64,6 +66,10 @@ export default {
       edge('b1', 'sh-ap-staff','sh-sw', 'network'),
       edge('b2', 'sh-pickup',  'sh-sw', 'network'),
       edge('b3', 'sh-print',   'sh-sw', 'network'),
+
+      // External in / out through the firewall
+      edge('ext-in',  'sh-in',  'sh-fw',  'wan', { label: 'Inbound' }),
+      edge('ext-out', 'sh-fw',  'sh-out', 'wan', { label: 'Outbound' }),
 
       // LAN → Firewall → transports (no SD-WAN)
       edge('w1', 'sh-sw',   'sh-fw',   'network'),

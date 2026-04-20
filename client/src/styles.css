@@ -861,6 +861,28 @@ html, body, #root {
 }
 .app.presenting .summary-pill { opacity: 0.9; }
 
+.validation-banner {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid #f59e0b;
+  color: #fde68a;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  max-width: 640px;
+  z-index: 8;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.35);
+}
+.validation-banner strong { color: #fbbf24; font-weight: 700; white-space: nowrap; }
+.validation-banner span   { line-height: 1.4; }
+.app.presenting .validation-banner { display: none; }
+
 .present-exit {
   position: absolute;
   top: 16px;

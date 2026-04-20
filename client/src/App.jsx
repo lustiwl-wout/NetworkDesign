@@ -337,14 +337,20 @@ function Editor({ me }) {
     const riskCounts = { low: 0, medium: 0, high: 0 };
     const phases = new Map();
     let deviceCount = 0;
+    let inputCount = 0;
+    let outputCount = 0;
     for (const n of nodes) {
       if (n.type === 'zone') continue;
-      deviceCount++;
+      if (n.type === 'device') {
+        deviceCount++;
+        if (n.data?.iconKey === 'boundary-input')  inputCount++;
+        if (n.data?.iconKey === 'boundary-output') outputCount++;
+      }
       if (n.data?.risk && riskCounts[n.data.risk] != null) riskCounts[n.data.risk]++;
       const p = n.data?.phase;
       if (p) phases.set(p, (phases.get(p) ?? 0) + 1);
     }
-    return { riskCounts, phases: [...phases.entries()], deviceCount };
+    return { riskCounts, phases: [...phases.entries()], deviceCount, inputCount, outputCount };
   }, [nodes]);
 
   const summarySubtitle = () => {
@@ -469,6 +475,15 @@ function Editor({ me }) {
           <Controls />
           <MiniMap pannable zoomable maskColor="rgba(15,23,42,0.6)" />
         </ReactFlow>
+        {summary.deviceCount > 0 && summary.inputCount === 0 && (
+          <div className="validation-banner" role="status">
+            <strong>⚠︎ No input boundary</strong>
+            <span>
+              Every design should have at least one <b>Input</b> boundary (drag one from the palette).
+              It's how readers see where traffic enters this site.
+            </span>
+          </div>
+        )}
         <SummaryPill summary={summary} />
         {present && (
           <button className="present-exit" onClick={() => setPresent(false)} title="Exit presentation (Esc)">

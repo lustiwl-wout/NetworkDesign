@@ -3,8 +3,8 @@ import { device, zone, edge, zoneSize } from './_shared.js';
 const Z = {
   warehouse: zoneSize(3, 2),
   office:    zoneSize(3, 1),
-  dcdc:      zoneSize(2, 3),
-  mgmt:      zoneSize(2, 1),
+  dcdc:      zoneSize(3, 3),
+  mgmt:      zoneSize(3, 1),
 };
 
 const GAP = 40;
@@ -42,13 +42,15 @@ export default {
       device('dc-users',   'client', 'z-office', 1, 0, { label: 'Office Workstations', capacity: '60 seats' }),
       device('dc-voip',    'client', 'z-office', 2, 0, { label: 'VoIP Handsets' }),
 
-      // DC Data Room (2x3)
-      device('dc-fw',       'firewall',   'z-dcdc', 0, 0, { label: 'DC Firewall', risk: 'medium' }),
-      device('dc-sw-core',  'switch',     'z-dcdc', 1, 0, { label: 'DC Core Switch', inputs: 4, outputs: 8 }),
-      device('dc-hv',       'hypervisor', 'z-dcdc', 0, 1, { label: 'Hypervisor (2-node)', capacity: 'HA pair' }),
-      device('dc-backup',   'server',     'z-dcdc', 1, 1, { label: 'Local Backup Appliance', capacity: 'Hardware · feeds HQ → IRE' }),
-      device('dc-mpls',     'router',     'z-dcdc', 0, 2, { label: 'MPLS Edge',  capacity: 'Primary · to HQ', phase: 'Primary',  inputs: 2, outputs: 3 }),
-      device('dc-5g',       'ap',         'z-dcdc', 1, 2, { label: '5G WAN Gateway', capacity: 'Backup transport',       phase: 'Backup' }),
+      // DC Data Room (3x3) with explicit input/output boundaries to HQ & shops
+      device('dc-in',       'boundary-input', 'z-dcdc', 0, 0, { label: 'From HQ / Customers', capacity: 'Inbound traffic', phase: 'Current' }),
+      device('dc-fw',       'firewall',        'z-dcdc', 1, 0, { label: 'DC Firewall', risk: 'medium' }),
+      device('dc-out',      'boundary-output', 'z-dcdc', 2, 0, { label: 'To Shops / Carriers', capacity: 'Outbound traffic', phase: 'Current' }),
+      device('dc-sw-core',  'switch',          'z-dcdc', 0, 1, { label: 'DC Core Switch', inputs: 4, outputs: 8 }),
+      device('dc-hv',       'hypervisor',      'z-dcdc', 1, 1, { label: 'Hypervisor (2-node)', capacity: 'HA pair' }),
+      device('dc-backup',   'server',          'z-dcdc', 2, 1, { label: 'Local Backup Appliance', capacity: 'Hardware · feeds HQ → IRE' }),
+      device('dc-mpls',     'router',          'z-dcdc', 0, 2, { label: 'MPLS Edge',  capacity: 'Primary · to HQ', phase: 'Primary',  inputs: 2, outputs: 3 }),
+      device('dc-5g',       'ap',              'z-dcdc', 1, 2, { label: '5G WAN Gateway', capacity: 'Backup transport', phase: 'Backup' }),
 
       // Management (2x1)
       device('dc-jump',     'server', 'z-mgmt', 0, 0, { label: 'Jump Host (PAM)' }),
@@ -67,6 +69,10 @@ export default {
       edge('o1', 'dc-users', 'dc-sw-off', 'network'),
       edge('o2', 'dc-voip',  'dc-sw-off', 'network'),
       edge('o3', 'dc-sw-off','dc-fw',     'network'),
+
+      // Inbound / outbound through the firewall
+      edge('d-in',  'dc-in',  'dc-fw',  'wan', { label: 'Inbound' }),
+      edge('d-out', 'dc-fw',  'dc-out', 'wan', { label: 'Outbound' }),
 
       // DC core: VMs run on the hypervisor
       edge('d1', 'dc-fw',      'dc-sw-core', 'network'),

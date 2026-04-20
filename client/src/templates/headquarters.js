@@ -5,7 +5,7 @@ const Z = {
   campus: zoneSize(3, 2),
   dc:     zoneSize(3, 2),
   cloud:  zoneSize(2, 2),
-  edge:   zoneSize(2, 2),
+  edge:   zoneSize(3, 2),
   mgmt:   zoneSize(2, 1),
 };
 
@@ -57,11 +57,13 @@ export default {
       device('hq-ecom-cdn', 'cloud', 'z-cloud', 0, 1, { label: 'e-Commerce CDN / WAF',  capacity: 'Customer web' }),
       device('hq-mdm',      'cloud', 'z-cloud', 1, 1, { label: 'MDM / EDR' }),
 
-      // WAN Edge (2x2)
-      device('hq-fw',       'firewall', 'z-edge', 0, 0, { label: 'Perimeter Firewall', risk: 'medium' }),
-      device('hq-internet', 'cloud',    'z-edge', 1, 0, { label: 'Internet',            capacity: 'Dual ISP' }),
-      device('hq-mpls',     'router',   'z-edge', 0, 1, { label: 'MPLS Edge',           capacity: 'Primary · Private hub', phase: 'Primary', inputs: 2, outputs: 6 }),
-      device('hq-5g',       'ap',       'z-edge', 1, 1, { label: '5G WAN Gateway',      capacity: 'Backup transport',       phase: 'Backup' }),
+      // WAN Edge (3x2) — explicit input + output boundaries framing the site
+      device('hq-in',       'boundary-input',  'z-edge', 0, 0, { label: 'From customers / branches', capacity: 'Inbound traffic', phase: 'Current' }),
+      device('hq-fw',       'firewall',        'z-edge', 1, 0, { label: 'Perimeter Firewall', risk: 'medium' }),
+      device('hq-out',      'boundary-output', 'z-edge', 2, 0, { label: 'To customers / SaaS', capacity: 'Outbound traffic', phase: 'Current' }),
+      device('hq-mpls',     'router',          'z-edge', 0, 1, { label: 'MPLS Edge',     capacity: 'Primary · Private hub', phase: 'Primary', inputs: 2, outputs: 6 }),
+      device('hq-internet', 'cloud',           'z-edge', 1, 1, { label: 'Internet',      capacity: 'Dual ISP' }),
+      device('hq-5g',       'ap',              'z-edge', 2, 1, { label: '5G WAN Gateway', capacity: 'Backup transport', phase: 'Backup' }),
 
       // Management (2x1)
       device('hq-jump',    'server', 'z-mgmt', 0, 0, { label: 'Jump Host (PAM)',  capacity: 'MFA · OOB' }),
@@ -83,6 +85,10 @@ export default {
       edge('e10','hq-identity', 'hq-hv',    'network', { label: 'hosted' }),
       edge('e11','hq-backup',   'hq-dc-sw', 'network'),
       edge('e12','hq-dc-sw',    'hq-fw',    'network'),
+
+      // Inbound / outbound through the firewall
+      edge('e-in',  'hq-in',      'hq-fw',       'wan', { label: 'Inbound' }),
+      edge('e-out', 'hq-fw',      'hq-out',      'wan', { label: 'Outbound' }),
 
       // Cloud
       edge('e13','hq-fw',       'hq-internet', 'network'),

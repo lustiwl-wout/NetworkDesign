@@ -120,6 +120,8 @@ const SEED_DEVICES = [
   { key: 'client',        label: 'Client',            icon_key: 'client',        default_inputs: 1, default_outputs: 1, sort_order: 70, description: 'End-user workstation or laptop.' },
   { key: 'ap',            label: 'Access Point',      icon_key: 'ap',            default_inputs: 1, default_outputs: 4, sort_order: 80, description: 'Wi-Fi access point.' },
   { key: 'cloud',         label: 'Cloud',             icon_key: 'cloud',         default_inputs: 1, default_outputs: 1, sort_order: 90, description: 'Public cloud region or external SaaS.' },
+  { key: 'boundary-input',  label: 'Input boundary',  icon_key: 'boundary-input',  default_inputs: 0, default_outputs: 1, sort_order: 5,  description: 'External source entering this design (internet, other site, customers).' },
+  { key: 'boundary-output', label: 'Output boundary', icon_key: 'boundary-output', default_inputs: 1, default_outputs: 0, sort_order: 7,  description: 'External destination leaving this design (other site, cloud, customers).' },
 ];
 
 const SEED_EDGE_KINDS = [
