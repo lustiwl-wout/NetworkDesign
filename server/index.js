@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import 'dotenv/config';
 import { designsRouter } from './routes/designs.js';
-import { deviceTypesRouter, zoneTypesRouter } from './routes/catalog.js';
+import { deviceTypesRouter, zoneTypesRouter, edgeKindsRouter } from './routes/catalog.js';
 import { authRouter } from './routes/auth.js';
 import { adminUsersRouter } from './routes/adminUsers.js';
 import { attachSession } from './auth/middleware.js';
@@ -34,6 +34,7 @@ app.use('/api/admin/users', adminUsersRouter);
 app.use('/api/designs', designsRouter);
 app.use('/api/device-types', deviceTypesRouter);
 app.use('/api/zone-types', zoneTypesRouter);
+app.use('/api/edge-kinds', edgeKindsRouter);
 
 const clientDist = path.resolve(__dirname, '..', 'client', 'dist');
 app.use(express.static(clientDist));

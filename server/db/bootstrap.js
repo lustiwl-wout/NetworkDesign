@@ -52,6 +52,20 @@ CREATE TABLE IF NOT EXISTS device_types (
   updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS edge_kinds (
+  id                SERIAL PRIMARY KEY,
+  key               TEXT NOT NULL UNIQUE,
+  label             TEXT NOT NULL,
+  description       TEXT DEFAULT '',
+  stroke            TEXT NOT NULL DEFAULT '#94a3b8',
+  stroke_width      NUMERIC NOT NULL DEFAULT 2,
+  stroke_dasharray  TEXT,
+  animated          BOOLEAN NOT NULL DEFAULT FALSE,
+  sort_order        INTEGER NOT NULL DEFAULT 0,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS zone_types (
   id              SERIAL PRIMARY KEY,
   key             TEXT NOT NULL UNIQUE,
@@ -84,6 +98,10 @@ DROP TRIGGER IF EXISTS zone_types_touch_updated_at ON zone_types;
 CREATE TRIGGER zone_types_touch_updated_at
   BEFORE UPDATE ON zone_types FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
 
+DROP TRIGGER IF EXISTS edge_kinds_touch_updated_at ON edge_kinds;
+CREATE TRIGGER edge_kinds_touch_updated_at
+  BEFORE UPDATE ON edge_kinds FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
+
 DROP TRIGGER IF EXISTS users_touch_updated_at ON users;
 CREATE TRIGGER users_touch_updated_at
   BEFORE UPDATE ON users FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
@@ -102,6 +120,15 @@ const SEED_DEVICES = [
   { key: 'client',        label: 'Client',            icon_key: 'client',        default_inputs: 1, default_outputs: 1, sort_order: 70, description: 'End-user workstation or laptop.' },
   { key: 'ap',            label: 'Access Point',      icon_key: 'ap',            default_inputs: 1, default_outputs: 4, sort_order: 80, description: 'Wi-Fi access point.' },
   { key: 'cloud',         label: 'Cloud',             icon_key: 'cloud',         default_inputs: 1, default_outputs: 1, sort_order: 90, description: 'Public cloud region or external SaaS.' },
+];
+
+const SEED_EDGE_KINDS = [
+  { key: 'network',    label: 'Network link',     description: 'Standard physical or logical network connection.',         stroke: '#94a3b8', stroke_width: 2,   stroke_dasharray: null,     animated: false, sort_order: 10 },
+  { key: 'management', label: 'Management / OOB', description: 'Out-of-band administrative or control-plane link.',        stroke: '#94a3b8', stroke_width: 1.5, stroke_dasharray: '4 4',    animated: false, sort_order: 20 },
+  { key: 'logs',       label: 'Log / telemetry',  description: 'One-way forward of logs or telemetry (e.g., to SIEM).',    stroke: '#a78bfa', stroke_width: 1.5, stroke_dasharray: '4 4',    animated: false, sort_order: 30 },
+  { key: 'replication',label: 'Data replication', description: 'Active data movement. Animated to signal live flow.',     stroke: '#22c55e', stroke_width: 2,   stroke_dasharray: '6 4',    animated: true,  sort_order: 40 },
+  { key: 'wan',        label: 'WAN / Internet',   description: 'Wide-area / public Internet link.',                        stroke: '#38bdf8', stroke_width: 2.5, stroke_dasharray: null,     animated: false, sort_order: 50 },
+  { key: 'planned',    label: 'Planned / future', description: 'Proposed future connection, not yet in place.',            stroke: '#64748b', stroke_width: 1.5, stroke_dasharray: '2 6',    animated: false, sort_order: 60 },
 ];
 
 const SEED_ZONES = [
@@ -153,6 +180,7 @@ export default async function initSchema() {
   await pool.query(SCHEMA);
   await seed('device_types', SEED_DEVICES);
   await seed('zone_types', SEED_ZONES);
+  await seed('edge_kinds', SEED_EDGE_KINDS);
   await seedInitialAdmin();
   console.log('[db] schema ensured');
 }

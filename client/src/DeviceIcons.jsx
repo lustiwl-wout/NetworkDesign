@@ -40,13 +40,44 @@ function Switch({ accent }) {
 }
 
 function Firewall({ accent }) {
+  // Hardware unit styled like the router / switch / server. Brick-wall
+  // pattern on the front panel carries the universal "firewall" metaphor.
+  const bricks = [];
+  const rows = 3;
+  const cols = 4;
+  const x0 = 7, y0 = 24, bw = 13, bh = 5, gap = 1;
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const offset = (r % 2 === 0) ? 0 : bw / 2;
+      bricks.push({
+        x: x0 + c * (bw + gap) + offset,
+        y: y0 + r * (bh + gap),
+        w: bw - gap,
+        h: bh,
+      });
+    }
+  }
   return (
     <svg viewBox="0 0 64 64" width="100%" height="100%" role="img" aria-label="Firewall">
-      <path d="M32 6 L54 14 V32 C54 46 44 54 32 58 C20 54 10 46 10 32 V14 Z"
-        fill={accent} stroke={LIGHT} strokeWidth="2" />
-      <path d="M32 6 L54 14 V32 C54 46 44 54 32 58 C20 54 10 46 10 32 V14 Z"
-        fill="none" stroke={LIGHT} strokeWidth="1" opacity="0.35" />
-      <path d="M24 30 L30 36 L42 22" stroke={LIGHT} strokeWidth="4" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      <defs>
+        <linearGradient id="fw-g" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0" stopColor={accent} stopOpacity="0.95" />
+          <stop offset="1" stopColor={accent} stopOpacity="0.6" />
+        </linearGradient>
+        <clipPath id="fw-clip">
+          <rect x="5" y="23" width="54" height="18" rx="2" />
+        </clipPath>
+      </defs>
+      <rect x="4" y="14" width="56" height="36" rx="5" fill="url(#fw-g)" stroke={LIGHT} strokeWidth="2" />
+      <rect x="4" y="14" width="56" height="7" fill={LIGHT} opacity="0.22" />
+      <g clipPath="url(#fw-clip)">
+        {bricks.map((b, i) => (
+          <rect key={i} x={b.x} y={b.y} width={b.w} height={b.h} fill={LIGHT} opacity="0.25" stroke={LIGHT} strokeOpacity="0.15" strokeWidth="0.5" />
+        ))}
+      </g>
+      <circle cx="11" cy="46" r="1.6" fill={LIGHT} />
+      <circle cx="17" cy="46" r="1.6" fill={LIGHT} opacity="0.5" />
+      <rect x="46" y="44" width="10" height="4" rx="1" fill={LIGHT} opacity="0.35" />
     </svg>
   );
 }

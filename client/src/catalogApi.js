@@ -23,3 +23,4 @@ function crud(resource) {
 
 export const deviceTypesApi = crud('device-types');
 export const zoneTypesApi   = crud('zone-types');
+export const edgeKindsApi   = crud('edge-kinds');

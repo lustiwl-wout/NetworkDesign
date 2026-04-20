@@ -160,32 +160,6 @@ html, body, #root {
 }
 .toggle-row input { width: auto; margin: 0; }
 
-/* Mode switch in topbar */
-.mode-switch {
-  display: inline-flex;
-  background: var(--panel-2);
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 2px;
-  margin-left: 8px;
-}
-.mode-switch button {
-  background: transparent;
-  color: var(--muted);
-  border: none;
-  padding: 4px 12px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  cursor: pointer;
-}
-.mode-switch button:hover { color: var(--text); }
-.mode-switch button.active {
-  background: var(--accent);
-  color: #081824;
-}
-
 .canvas {
   grid-area: canvas;
   position: relative;
@@ -348,26 +322,8 @@ html, body, #root {
   pointer-events: auto;
   transition: opacity 0.15s;
 }
-.canvas.mode-management .net-node:hover .port-handle { opacity: 0.7; }
-.canvas.mode-engineer .port-handle { opacity: 0.95; width: 10px !important; height: 10px !important; }
-
-/* Engineer-only / management-only visibility */
-.canvas.mode-management .engineer-only { display: none !important; }
-.canvas.mode-engineer .management-only { display: none !important; }
-.canvas.mode-engineer .sub-tech {
-  margin-top: 6px;
-  padding-top: 6px;
-  border-top: 1px dashed rgba(148, 163, 184, 0.25);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 10.5px;
-  line-height: 1.55;
-  color: var(--muted);
-  letter-spacing: 0.02em;
-}
-.canvas.mode-engineer .sub-tech .ports-hint {
-  color: var(--accent);
-  opacity: 0.8;
-}
+.net-node:hover .port-handle { opacity: 0.6; }
+.net-node.selected .port-handle { opacity: 0.95; }
 
 /* Zone node */
 .zone-node {
@@ -404,6 +360,24 @@ html, body, #root {
 /* React Flow edge labels (override default) */
 .react-flow__edge-textbg { fill: var(--bg); }
 .react-flow__edge-text { fill: var(--text); font-size: 11px; }
+.react-flow__edge-label-floating {
+  position: absolute;
+  pointer-events: all;
+  background: rgba(15, 23, 42, 0.92);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  color: var(--text);
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+/* Animated edge keyframe (React Flow's built-in .animated class re-asserted) */
+.react-flow__edge-path.animated {
+  stroke-dasharray: 5;
+  animation: dashdraw 0.5s linear infinite;
+}
+@keyframes dashdraw { to { stroke-dashoffset: -10; } }
 
 .toast {
   position: absolute;

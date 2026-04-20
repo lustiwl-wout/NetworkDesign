@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import DeviceIcon, { ICON_KEYS } from './DeviceIcons.jsx';
-import { deviceTypesApi, zoneTypesApi } from './catalogApi.js';
+import { deviceTypesApi, zoneTypesApi, edgeKindsApi } from './catalogApi.js';
 import UsersAdmin from './UsersAdmin.jsx';
 
 const BLANK_DEVICE = {
@@ -42,6 +42,10 @@ export default function AdminPortal() {
             onClick={() => setTab('zones')}
           >Zones</button>
           <button
+            className={`tab${tab === 'edges' ? ' active' : ''}`}
+            onClick={() => setTab('edges')}
+          >Edge kinds</button>
+          <button
             className={`tab${tab === 'users' ? ' active' : ''}`}
             onClick={() => setTab('users')}
           >Users</button>
@@ -53,6 +57,7 @@ export default function AdminPortal() {
       <main className="admin-main">
         {tab === 'devices' && <DeviceAdmin />}
         {tab === 'zones'   && <ZoneAdmin />}
+        {tab === 'edges'   && <EdgeKindAdmin />}
         {tab === 'users'   && <UsersAdmin />}
       </main>
     </div>
@@ -386,6 +391,187 @@ function ZoneForm({ value, onChange, onSave, onCancel }) {
         value={value.description ?? ''}
         onChange={(e) => set({ description: e.target.value })}
       />
+
+      <div className="form-actions">
+        <button type="button" className="btn secondary" onClick={onCancel}>Cancel</button>
+        <button type="submit" className="btn">Save</button>
+      </div>
+    </form>
+  );
+}
+
+const BLANK_EDGE = {
+  key: '',
+  label: '',
+  description: '',
+  stroke: '#94a3b8',
+  strokeWidth: 2,
+  strokeDasharray: '',
+  animated: false,
+  sortOrder: 100,
+};
+
+function EdgeKindAdmin() {
+  const [items, setItems] = useState([]);
+  const [editing, setEditing] = useState(null);
+  const [err, setErr] = useState(null);
+
+  const load = async () => {
+    try { setItems(await edgeKindsApi.list()); setErr(null); }
+    catch (e) { setErr(e.message); }
+  };
+  useEffect(() => { load(); }, []);
+
+  const save = async (row) => {
+    try {
+      const payload = { ...row };
+      if (payload.strokeDasharray === '') payload.strokeDasharray = null;
+      if (row.id) await edgeKindsApi.update(row.id, payload);
+      else await edgeKindsApi.create(payload);
+      setEditing(null);
+      await load();
+    } catch (e) { setErr(e.message); }
+  };
+
+  const remove = async (row) => {
+    if (!confirm(`Delete edge kind "${row.label}"?`)) return;
+    try { await edgeKindsApi.remove(row.id); await load(); }
+    catch (e) { setErr(e.message); }
+  };
+
+  return (
+    <div className="admin-grid">
+      <section className="admin-list">
+        <div className="admin-list-header">
+          <h2>Connection kinds</h2>
+          <button className="btn" onClick={() => setEditing({ ...BLANK_EDGE })}>+ New kind</button>
+        </div>
+        {err && <div className="admin-error">{err}</div>}
+        <table>
+          <thead>
+            <tr>
+              <th style={{ width: 100 }}>Preview</th>
+              <th>Label</th>
+              <th>Key</th>
+              <th>Animated</th>
+              <th style={{ width: 120 }}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((it) => (
+              <tr key={it.id} className={editing?.id === it.id ? 'editing' : ''}>
+                <td><EdgePreview kind={it} /></td>
+                <td><strong>{it.label}</strong><div className="sub">{it.description}</div></td>
+                <td><code>{it.key}</code></td>
+                <td>{it.animated ? '✓' : '—'}</td>
+                <td className="row-actions">
+                  <button className="btn secondary small" onClick={() => setEditing({ ...it })}>Edit</button>
+                  <button className="btn danger small" onClick={() => remove(it)}>Del</button>
+                </td>
+              </tr>
+            ))}
+            {items.length === 0 && (
+              <tr><td colSpan={5} className="empty">No connection kinds defined.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </section>
+
+      {editing && (
+        <section className="admin-form">
+          <h2>{editing.id ? 'Edit connection kind' : 'New connection kind'}</h2>
+          <EdgeKindForm
+            value={editing}
+            onChange={setEditing}
+            onSave={() => save(editing)}
+            onCancel={() => setEditing(null)}
+          />
+        </section>
+      )}
+    </div>
+  );
+}
+
+function EdgePreview({ kind }) {
+  const { stroke, strokeWidth = 2, strokeDasharray, animated } = kind;
+  return (
+    <svg width="80" height="20" aria-hidden="true">
+      <line
+        x1="4" y1="10" x2="72" y2="10"
+        stroke={stroke}
+        strokeWidth={strokeWidth}
+        strokeDasharray={strokeDasharray || undefined}
+      >
+        {animated && (
+          <animate attributeName="stroke-dashoffset" from="0" to="-20" dur="1.1s" repeatCount="indefinite" />
+        )}
+      </line>
+      <polygon points="76,10 70,6 70,14" fill={stroke} />
+    </svg>
+  );
+}
+
+function EdgeKindForm({ value, onChange, onSave, onCancel }) {
+  const set = (patch) => onChange({ ...value, ...patch });
+  return (
+    <form onSubmit={(e) => { e.preventDefault(); onSave(); }} className="form">
+      <div className="form-preview">
+        <EdgePreview kind={value} />
+      </div>
+
+      <div className="two-col">
+        <div>
+          <label>Key</label>
+          <input required value={value.key}
+            onChange={(e) => set({ key: e.target.value.replace(/\s+/g, '-').toLowerCase() })}
+            placeholder="ipsec-vpn" />
+        </div>
+        <div>
+          <label>Label</label>
+          <input required value={value.label}
+            onChange={(e) => set({ label: e.target.value })}
+            placeholder="IPsec VPN" />
+        </div>
+      </div>
+
+      <label>Description</label>
+      <textarea rows="2"
+        value={value.description ?? ''}
+        onChange={(e) => set({ description: e.target.value })} />
+
+      <div className="two-col">
+        <div>
+          <label>Stroke colour</label>
+          <input type="color" value={value.stroke}
+            onChange={(e) => set({ stroke: e.target.value })} />
+        </div>
+        <div>
+          <label>Stroke width</label>
+          <input type="number" step="0.5" min="1" max="8"
+            value={value.strokeWidth}
+            onChange={(e) => set({ strokeWidth: Number(e.target.value) })} />
+        </div>
+      </div>
+
+      <div className="two-col">
+        <div>
+          <label>Dash pattern</label>
+          <input value={value.strokeDasharray ?? ''}
+            onChange={(e) => set({ strokeDasharray: e.target.value })}
+            placeholder="6 4 (blank = solid)" />
+        </div>
+        <div>
+          <label>Sort order</label>
+          <input type="number" value={value.sortOrder ?? 100}
+            onChange={(e) => set({ sortOrder: Number(e.target.value) })} />
+        </div>
+      </div>
+
+      <label className="toggle-row">
+        <input type="checkbox" checked={!!value.animated}
+          onChange={(e) => set({ animated: e.target.checked })} />
+        Animated flow (pulses along the line)
+      </label>
 
       <div className="form-actions">
         <button type="button" className="btn secondary" onClick={onCancel}>Cancel</button>

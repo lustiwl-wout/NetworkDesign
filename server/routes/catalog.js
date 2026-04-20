@@ -100,3 +100,12 @@ export const zoneTypesRouter = catalogRouter({
     'key', 'label', 'color', 'description', 'defaultWidth', 'defaultHeight', 'sortOrder',
   ],
 });
+
+export const edgeKindsRouter = catalogRouter({
+  table: 'edge_kinds',
+  required: ['key', 'label'],
+  allowedFields: [
+    'key', 'label', 'description', 'stroke', 'strokeWidth',
+    'strokeDasharray', 'animated', 'sortOrder',
+  ],
+});
