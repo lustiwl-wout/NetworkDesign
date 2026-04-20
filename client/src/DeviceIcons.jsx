@@ -40,44 +40,30 @@ function Switch({ accent }) {
 }
 
 function Firewall({ accent }) {
-  // Hardware unit styled like the router / switch / server. Brick-wall
-  // pattern on the front panel carries the universal "firewall" metaphor.
-  const bricks = [];
-  const rows = 3;
-  const cols = 4;
-  const x0 = 7, y0 = 24, bw = 13, bh = 5, gap = 1;
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const offset = (r % 2 === 0) ? 0 : bw / 2;
-      bricks.push({
-        x: x0 + c * (bw + gap) + offset,
-        y: y0 + r * (bh + gap),
-        w: bw - gap,
-        h: bh,
-      });
-    }
-  }
+  // Matches the router structure: hardware box with a small decoration above.
+  // Router has antennas; firewall gets a compact shield-with-check badge.
   return (
     <svg viewBox="0 0 64 64" width="100%" height="100%" role="img" aria-label="Firewall">
       <defs>
         <linearGradient id="fw-g" x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0" stopColor={accent} stopOpacity="0.95" />
-          <stop offset="1" stopColor={accent} stopOpacity="0.6" />
+          <stop offset="0" stopColor={accent} stopOpacity="0.9" />
+          <stop offset="1" stopColor={accent} stopOpacity="0.55" />
         </linearGradient>
-        <clipPath id="fw-clip">
-          <rect x="5" y="23" width="54" height="18" rx="2" />
-        </clipPath>
       </defs>
-      <rect x="4" y="14" width="56" height="36" rx="5" fill="url(#fw-g)" stroke={LIGHT} strokeWidth="2" />
-      <rect x="4" y="14" width="56" height="7" fill={LIGHT} opacity="0.22" />
-      <g clipPath="url(#fw-clip)">
-        {bricks.map((b, i) => (
-          <rect key={i} x={b.x} y={b.y} width={b.w} height={b.h} fill={LIGHT} opacity="0.25" stroke={LIGHT} strokeOpacity="0.15" strokeWidth="0.5" />
-        ))}
-      </g>
-      <circle cx="11" cy="46" r="1.6" fill={LIGHT} />
-      <circle cx="17" cy="46" r="1.6" fill={LIGHT} opacity="0.5" />
-      <rect x="46" y="44" width="10" height="4" rx="1" fill={LIGHT} opacity="0.35" />
+      {/* Shield badge above the unit */}
+      <path d="M32 6 L22 10 V18 C22 24 27 27 32 29 C37 27 42 24 42 18 V10 Z"
+        fill={accent} stroke={LIGHT} strokeWidth="1.8" />
+      <path d="M27 18 L30 21 L37 14"
+        stroke={LIGHT} strokeWidth="2.2" fill="none"
+        strokeLinecap="round" strokeLinejoin="round" />
+
+      {/* Hardware unit — same rect proportions as Router */}
+      <rect x="8" y="34" width="48" height="20" rx="4" fill="url(#fw-g)" stroke={LIGHT} strokeWidth="2" />
+      <rect x="8" y="34" width="48" height="5" fill={LIGHT} opacity="0.22" />
+      <circle cx="16" cy="46" r="2" fill={LIGHT} />
+      <circle cx="22" cy="46" r="2" fill={LIGHT} opacity="0.55" />
+      <circle cx="28" cy="46" r="2" fill={LIGHT} opacity="0.3" />
+      <rect x="42" y="44" width="10" height="4" rx="1" fill={LIGHT} opacity="0.35" />
     </svg>
   );
 }
@@ -220,6 +206,38 @@ function VM({ accent }) {
       <rect x="18" y="28" width="18" height="2" fill={LIGHT} opacity="0.7" />
       <rect x="18" y="33" width="22" height="2" fill={LIGHT} opacity="0.45" />
       <rect x="18" y="38" width="14" height="2" fill={LIGHT} opacity="0.45" />
+    </svg>
+  );
+}
+
+function BoundaryIn({ accent }) {
+  return (
+    <svg viewBox="0 0 64 64" width="100%" height="100%" role="img" aria-label="Input boundary">
+      <defs>
+        <linearGradient id="bin-g" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0" stopColor={accent} stopOpacity="0.95" />
+          <stop offset="1" stopColor={accent} stopOpacity="0.55" />
+        </linearGradient>
+      </defs>
+      <rect x="4" y="14" width="56" height="36" rx="6" fill="url(#bin-g)" stroke={LIGHT} strokeWidth="2" />
+      <polygon points="12,24 12,40 26,32" fill={LIGHT} />
+      <text x="32" y="37" fill={LIGHT} fontSize="13" fontWeight="800" letterSpacing="0.08em">IN</text>
+    </svg>
+  );
+}
+
+function BoundaryOut({ accent }) {
+  return (
+    <svg viewBox="0 0 64 64" width="100%" height="100%" role="img" aria-label="Output boundary">
+      <defs>
+        <linearGradient id="bout-g" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0" stopColor={accent} stopOpacity="0.95" />
+          <stop offset="1" stopColor={accent} stopOpacity="0.55" />
+        </linearGradient>
+      </defs>
+      <rect x="4" y="14" width="56" height="36" rx="6" fill="url(#bout-g)" stroke={LIGHT} strokeWidth="2" />
+      <text x="10" y="37" fill={LIGHT} fontSize="13" fontWeight="800" letterSpacing="0.08em">OUT</text>
+      <polygon points="40,24 54,32 40,40" fill={LIGHT} />
     </svg>
   );
 }

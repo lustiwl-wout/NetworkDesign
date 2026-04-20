@@ -379,6 +379,10 @@ html, body, #root {
 }
 @keyframes dashdraw { to { stroke-dashoffset: -10; } }
 
+/* Zones sit behind edges so lines visually float over zone backgrounds.
+   Combined with node.zIndex = -1 on the data side. */
+.react-flow__node.react-flow__node-zone { z-index: -1 !important; }
+
 .toast {
   position: absolute;
   bottom: 16px;

@@ -3,54 +3,49 @@ import { BaseEdge, useNodes, getSmoothStepPath, EdgeLabelRenderer } from 'reactf
 import {
   getSmartEdge,
   pathfindingAStarNoDiagonal,
-  svgDrawStraightLinePath,
+  svgDrawSmoothLinePath,
 } from '@tisoap/react-flow-smart-edge';
 
-// Custom smart edge that:
-//   1. Only treats *device* nodes as obstacles. Zones and annotations are
-//      intentionally transparent to the router so lines can pass through
-//      their backgrounds but route around hardware icons.
-//   2. Uses a generous nodePadding so lines never hug or cross device icons.
-//   3. Falls back to smoothstep if the router can't find a path.
+// Custom smart edge that routes around device icons.
+// - Zones and annotations are NOT obstacles — lines pass over their
+//   backgrounds freely.
+// - Uses each node's positionAbsolute so parented devices are placed
+//   correctly on the obstacle grid.
+// - Generous padding so edges never hug device icons.
 export default function SmartEdge(props) {
   const {
-    id, source, target, sourcePosition, targetPosition,
-    sourceX, sourceY, targetX, targetY, style = {}, markerEnd, label, data, animated,
+    id, sourcePosition, targetPosition,
+    sourceX, sourceY, targetX, targetY, style = {}, markerEnd, label, animated,
   } = props;
 
   const nodes = useNodes();
 
-  const obstacles = useMemo(() => {
-    const abs = new Map();
-    for (const n of nodes) {
-      // Skip non-devices entirely.
-      if (n.type !== 'device') continue;
-      // Resolve to absolute position if parented to a zone.
-      let x = n.position?.x ?? 0;
-      let y = n.position?.y ?? 0;
-      if (n.parentNode) {
-        const parent = nodes.find((p) => p.id === n.parentNode);
-        if (parent) { x += parent.position.x; y += parent.position.y; }
-      }
-      const w = n.width  ?? n.style?.width  ?? 170;
-      const h = n.height ?? n.style?.height ?? 150;
-      abs.set(n.id, { ...n, position: { x, y }, width: w, height: h, parentNode: undefined });
-    }
-    return [...abs.values()];
-  }, [nodes]);
+  const obstacles = useMemo(
+    () =>
+      nodes
+        .filter((n) => n.type === 'device' && n.width && n.height)
+        .map((n) => ({
+          ...n,
+          // positionAbsolute is set by React Flow even when the node has a parent.
+          position: n.positionAbsolute ?? n.position,
+          parentNode: undefined,
+        })),
+    [nodes]
+  );
 
   const smart = getSmartEdge({
     sourcePosition, targetPosition,
     sourceX, sourceY, targetX, targetY,
     nodes: obstacles,
     options: {
-      nodePadding: 24,
-      gridRatio: 8,
+      nodePadding: 28,
+      gridRatio: 6,
       generatePath: pathfindingAStarNoDiagonal,
-      drawEdge: svgDrawStraightLinePath,
+      drawEdge: svgDrawSmoothLinePath,
     },
   });
 
+  // Fallback: if A* fails (e.g. nodes not yet measured), draw a smoothstep path.
   if (smart === null) {
     const [p, lx, ly] = getSmoothStepPath({
       sourceX, sourceY, targetX, targetY,

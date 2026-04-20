@@ -159,7 +159,7 @@ function Editor({ me }) {
           id: nextId(),
           type: 'device',
           position: relPos,
-          ...(parent ? { parentNode: parent.id, extent: 'parent' } : {}),
+          ...(parent ? { parentNode: parent.id } : {}),
           data: {
             iconKey: d.iconKey,
             label: d.label,
@@ -181,6 +181,7 @@ function Editor({ me }) {
             type: 'zone',
             position,
             style: { width: z.defaultWidth, height: z.defaultHeight },
+            zIndex: -1,
             data: { typeKey: z.key, label: z.label, color: z.color, sublabel: '' },
           },
           ...nds,
@@ -209,6 +210,32 @@ function Editor({ me }) {
     event.dataTransfer.setData('application/reactflow', JSON.stringify({ kind, value }));
     event.dataTransfer.effectAllowed = 'move';
   };
+
+  // Re-parent devices when dragged across zones. Zones don't clamp their
+  // children (extent: 'parent') so this runs on every drag.
+  const onNodeDragStop = useCallback((_event, node) => {
+    if (node.type !== 'device') return;
+    const absPos = node.positionAbsolute
+      ?? (node.parentNode
+        ? (() => {
+            const p = nodes.find((n) => n.id === node.parentNode);
+            return p ? { x: node.position.x + p.position.x, y: node.position.y + p.position.y } : node.position;
+          })()
+        : node.position);
+    const newParent = findContainingZone(nodes, absPos);
+    const newParentId = newParent?.id ?? undefined;
+    if (newParentId === (node.parentNode ?? undefined)) return;
+    setNodes((nds) => nds.map((n) => {
+      if (n.id !== node.id) return n;
+      const relPos = newParent
+        ? { x: absPos.x - newParent.position.x, y: absPos.y - newParent.position.y }
+        : absPos;
+      const next = { ...n, position: relPos };
+      if (newParentId) next.parentNode = newParentId;
+      else delete next.parentNode;
+      return next;
+    }));
+  }, [nodes, setNodes]);
 
   const newDesign = () => {
     setCurrentId(null);
@@ -430,6 +457,7 @@ function Editor({ me }) {
           onConnect={onConnect}
           onNodeClick={(_, node) => { setSelectedNode(node); setSelectedEdge(null); }}
           onEdgeClick={(_, edge) => { setSelectedEdge(edge); setSelectedNode(null); }}
+          onNodeDragStop={onNodeDragStop}
           onPaneClick={() => { setSelectedNode(null); setSelectedEdge(null); setTemplateOpen(false); }}
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}

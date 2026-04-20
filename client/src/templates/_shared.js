@@ -31,17 +31,18 @@ export const zone = (id, x, y, width, height, data) => ({
   type: 'zone',
   position: { x, y },
   style: { width, height },
+  zIndex: -1, // render behind edges so lines float above the zone fill
   data,
 });
 
-// Device *inside* a zone — position is relative to the parent, and
-// extent: 'parent' clamps dragging so devices can never leave the zone.
+// Device parented to a zone. Position is relative to the zone. Nodes are
+// *not* clamped with extent: 'parent' so they can be re-parented by dragging
+// into another zone at runtime (see onNodeDragStop in App).
 export const device = (id, iconKey, zoneId, col, row, data = {}) => ({
   id,
   type: 'device',
   position: slot(col, row),
   parentNode: zoneId,
-  extent: 'parent',
   data: { iconKey, inputs: 1, outputs: 1, ...data },
 });
 
