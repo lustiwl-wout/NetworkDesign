@@ -8,7 +8,7 @@ export default {
   graph: {
     nodes: [
       zone('z-campus',   0,    0,   560, 420, { color: '#3b82f6', label: 'HQ Campus LAN',       sublabel: 'Offices, meeting rooms, Wi-Fi' }),
-      zone('z-dc',       0,    440, 560, 360, { color: '#8b5cf6', label: 'On-prem Data Centre', sublabel: 'Core business systems' }),
+      zone('z-dc',       0,    440, 560, 440, { color: '#8b5cf6', label: 'On-prem Data Centre', sublabel: 'Hypervisor cluster + business VMs' }),
       zone('z-cloud',    600,  0,   460, 420, { color: '#06b6d4', label: 'Cloud / SaaS',        sublabel: 'IaaS + productivity services' }),
       zone('z-edge',     600,  440, 460, 300, { color: '#f59e0b', label: 'WAN Edge',            sublabel: 'MPLS · SD-WAN · 5G' }),
       zone('z-mgmt',     600,  760, 460, 140, { color: '#94a3b8', label: 'Management' }),
@@ -22,13 +22,14 @@ export default {
       device('hq-kiosk',     'client', 400, 200, { label: 'Reception Kiosk' }),
       device('hq-cctv',      'client', 240, 320, { label: 'CCTV / Physical Security' }),
 
-      // Data Center
-      device('hq-dc-sw',     'switch',   60,  480, { label: 'DC Switch',                       inputs: 4, outputs: 8 }),
-      device('hq-erp',       'server',   240, 480, { label: 'ERP (Order / Stock / Finance)',   capacity: 'Crown-jewel system', risk: 'high' }),
-      device('hq-ecom',      'server',   400, 480, { label: 'e-Commerce Backend',              capacity: 'Customer orders' }),
-      device('hq-identity',  'server',   60,  620, { label: 'Identity (AD / SSO)',             capacity: 'SSO for all sites', risk: 'high' }),
-      device('hq-bi',        'database', 240, 620, { label: 'Data Lake / BI',                  capacity: 'Analytics' }),
-      device('hq-backup',    'server',   400, 620, { label: 'Backup Target',                   capacity: 'Source to IRE' }),
+      // Data Center — virtualised on a hypervisor cluster
+      device('hq-dc-sw',     'switch',     60,  480, { label: 'DC Switch',                   inputs: 4, outputs: 8 }),
+      device('hq-hv',        'hypervisor', 240, 480, { label: 'Hypervisor Cluster',          capacity: '12 hosts · HA', inputs: 2, outputs: 6 }),
+      device('hq-erp',       'vm',         400, 480, { label: 'ERP (Order / Stock / Finance)', capacity: 'Crown-jewel VM', risk: 'high' }),
+      device('hq-ecom',      'vm',         60,  620, { label: 'e-Commerce Backend VM',        capacity: 'Customer orders' }),
+      device('hq-identity',  'vm',         240, 620, { label: 'Identity VM (AD / SSO)',       capacity: 'SSO for all sites', risk: 'high' }),
+      device('hq-bi',        'database',   400, 620, { label: 'Data Lake / BI',               capacity: 'Analytics' }),
+      device('hq-backup',    'server',     60,  760, { label: 'Backup Appliance',             capacity: 'Hardware · source to IRE' }),
 
       // Cloud / SaaS
       device('hq-saas',      'cloud', 660, 60,  { label: 'M365 / Collaboration',  capacity: 'Email · Teams · OneDrive' }),
@@ -57,13 +58,15 @@ export default {
       edge('e6',  'hq-cctv',   'hq-core-sw', 'network'),
       edge('e7',  'hq-core-sw','hq-fw',      'network'),
 
-      // Data Center
-      edge('e8',  'hq-erp',      'hq-dc-sw', 'network'),
-      edge('e9',  'hq-ecom',     'hq-dc-sw', 'network'),
-      edge('e10', 'hq-identity', 'hq-dc-sw', 'network'),
-      edge('e11', 'hq-bi',       'hq-dc-sw', 'network'),
-      edge('e12', 'hq-backup',   'hq-dc-sw', 'network'),
-      edge('e13', 'hq-dc-sw',    'hq-fw',    'network'),
+      // Data Center: VMs run on the hypervisor cluster; cluster is the only
+      // thing on the network fabric from the DC perspective.
+      edge('e8',  'hq-hv',       'hq-dc-sw', 'network'),
+      edge('e9',  'hq-erp',      'hq-hv',    'network', { label: 'hosted' }),
+      edge('e10', 'hq-ecom',     'hq-hv',    'network', { label: 'hosted' }),
+      edge('e11', 'hq-identity', 'hq-hv',    'network', { label: 'hosted' }),
+      edge('e12', 'hq-bi',       'hq-dc-sw', 'network'),
+      edge('e13', 'hq-backup',   'hq-dc-sw', 'network'),
+      edge('e13b','hq-dc-sw',    'hq-fw',    'network'),
 
       // Cloud
       edge('e14', 'hq-fw',       'hq-internet', 'network'),

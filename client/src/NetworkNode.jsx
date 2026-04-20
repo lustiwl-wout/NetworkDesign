@@ -51,9 +51,17 @@ export default function NetworkNode({ data, selected }) {
 
       <div className="icon-wrap"><DeviceIcon iconKey={iconKey} size={72} /></div>
       <div className="label">{data?.label ?? 'Device'}</div>
-      {(data?.capacity || data?.ip) && (
-        <div className="sub">{data.capacity || data.ip}</div>
-      )}
+      {data?.capacity && <div className="sub">{data.capacity}</div>}
+
+      <div className="engineer-only sub-tech">
+        {data?.hostname && <div>{data.hostname}</div>}
+        {data?.ip && <div>{data.ip}</div>}
+        {data?.vlan && <div>VLAN {data.vlan}</div>}
+        {data?.model && <div>{data.model}</div>}
+        {(inputs > 0 || outputs > 0) && (
+          <div className="ports-hint">{inputs} in · {outputs} out</div>
+        )}
+      </div>
 
       {portOffsets(outputs).map((top, i) => (
         <Handle

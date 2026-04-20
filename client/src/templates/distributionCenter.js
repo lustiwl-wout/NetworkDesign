@@ -28,12 +28,13 @@ export default {
       device('dc-print',     'server', 420, 480, { label: 'Office Print' }),
       device('dc-meeting',   'client', 240, 600, { label: 'Meeting Room AV' }),
 
-      // DC Data Room
-      device('dc-fw',        'firewall', 720, 60,  { label: 'DC Firewall', risk: 'medium' }),
-      device('dc-sw-core',   'switch',   900, 60,  { label: 'DC Core Switch', inputs: 4, outputs: 8 }),
-      device('dc-wms',       'server',   720, 200, { label: 'WMS (Warehouse Mgmt)',  capacity: 'Local read cache', risk: 'high' }),
-      device('dc-tms',       'server',   900, 200, { label: 'TMS (Transport Mgmt)' }),
-      device('dc-backup',    'server',   720, 320, { label: 'Local Backup / Staging',capacity: 'Feeds HQ → IRE' }),
+      // DC Data Room — small hypervisor footprint hosting the site VMs
+      device('dc-fw',        'firewall',   720, 60,  { label: 'DC Firewall', risk: 'medium' }),
+      device('dc-sw-core',   'switch',     900, 60,  { label: 'DC Core Switch', inputs: 4, outputs: 8 }),
+      device('dc-hv',        'hypervisor', 720, 200, { label: 'Hypervisor (2-node)', capacity: 'HA pair' }),
+      device('dc-wms',       'vm',         900, 200, { label: 'WMS VM',              capacity: 'Local read cache', risk: 'high' }),
+      device('dc-tms',       'vm',         720, 320, { label: 'TMS VM' }),
+      device('dc-backup',    'server',     900, 320, { label: 'Local Backup Appliance', capacity: 'Hardware · feeds HQ → IRE' }),
       device('dc-mpls',      'router',   900, 320, { label: 'MPLS Edge',              capacity: 'Primary link to HQ', phase: 'Primary',  inputs: 2, outputs: 3 }),
       device('dc-sdwan',     'router',   720, 440, { label: 'SD-WAN Edge',            capacity: 'Overlay · Break-out', phase: 'Optional', inputs: 2, outputs: 3 }),
       device('dc-5g',        'ap',       900, 440, { label: '5G WAN Gateway',         capacity: 'Backup transport',    phase: 'Backup' }),
@@ -59,11 +60,12 @@ export default {
       edge('o3', 'dc-meeting', 'dc-sw-off', 'network'),
       edge('o4', 'dc-sw-off',  'dc-fw',     'network'),
 
-      // DC core
+      // DC core: VMs run on the hypervisor; hypervisor connects to the core switch.
       edge('d1', 'dc-fw',      'dc-sw-core', 'network'),
-      edge('d2', 'dc-wms',     'dc-sw-core', 'network'),
-      edge('d3', 'dc-tms',     'dc-sw-core', 'network'),
-      edge('d4', 'dc-backup',  'dc-sw-core', 'network'),
+      edge('d2', 'dc-hv',      'dc-sw-core', 'network'),
+      edge('d3', 'dc-wms',     'dc-hv',      'network', { label: 'hosted' }),
+      edge('d4', 'dc-tms',     'dc-hv',      'network', { label: 'hosted' }),
+      edge('d5b','dc-backup',  'dc-sw-core', 'network'),
 
       // WAN (primary + optional + backup), converging at the core switch
       edge('d5', 'dc-sw-core', 'dc-mpls',  'wan',     { label: 'Primary · MPLS to HQ' }),

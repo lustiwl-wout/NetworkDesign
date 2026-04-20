@@ -62,12 +62,15 @@ const SEED_DEVICES = [
   { key: 'router',        label: 'Router',        icon_key: 'router',        default_inputs: 2, default_outputs: 4, sort_order: 10, description: 'Layer-3 forwarding between networks.' },
   { key: 'switch',        label: 'Switch',        icon_key: 'switch',        default_inputs: 1, default_outputs: 8, sort_order: 20, description: 'Layer-2 port aggregation for devices on the same VLAN.' },
   { key: 'firewall',      label: 'Firewall',      icon_key: 'firewall',      default_inputs: 1, default_outputs: 1, sort_order: 30, description: 'Traffic filtering between security zones.' },
-  { key: 'server',        label: 'Server',        icon_key: 'server',        default_inputs: 1, default_outputs: 1, sort_order: 40, description: 'Compute host (physical or VM).' },
-  { key: 'client',        label: 'Client',        icon_key: 'client',        default_inputs: 1, default_outputs: 1, sort_order: 50, description: 'End-user workstation or laptop.' },
-  { key: 'cloud',         label: 'Cloud',         icon_key: 'cloud',         default_inputs: 1, default_outputs: 1, sort_order: 60, description: 'Public cloud region or external service.' },
-  { key: 'ap',            label: 'Access Point',  icon_key: 'ap',            default_inputs: 1, default_outputs: 4, sort_order: 70, description: 'Wi-Fi access point.' },
-  { key: 'database',      label: 'Database',      icon_key: 'database',      default_inputs: 1, default_outputs: 0, sort_order: 80, description: 'Persistent data store (RDBMS, NoSQL, object storage).' },
-  { key: 'load-balancer', label: 'Load Balancer', icon_key: 'load-balancer', default_inputs: 1, default_outputs: 4, sort_order: 90, description: 'Distributes traffic across backend pools.' },
+  { key: 'server',        label: 'Server (hardware)', icon_key: 'server',    default_inputs: 1, default_outputs: 1, sort_order: 40, description: 'Bare-metal / physical server hardware.' },
+  { key: 'hypervisor',    label: 'Hypervisor',    icon_key: 'hypervisor',    default_inputs: 1, default_outputs: 1, sort_order: 42, description: 'Virtualization host (ESXi, Hyper-V, KVM, Proxmox).' },
+  { key: 'vm',            label: 'Virtual Machine', icon_key: 'vm',          default_inputs: 1, default_outputs: 1, sort_order: 44, description: 'Guest VM running on a hypervisor.' },
+  { key: 'container',     label: 'Container / Pod', icon_key: 'container',   default_inputs: 1, default_outputs: 1, sort_order: 46, description: 'Containerized workload (Docker, Kubernetes pod).' },
+  { key: 'database',      label: 'Database',      icon_key: 'database',      default_inputs: 1, default_outputs: 0, sort_order: 50, description: 'Persistent data store (RDBMS, NoSQL, object storage).' },
+  { key: 'load-balancer', label: 'Load Balancer', icon_key: 'load-balancer', default_inputs: 1, default_outputs: 4, sort_order: 60, description: 'Distributes traffic across backend pools.' },
+  { key: 'client',        label: 'Client',        icon_key: 'client',        default_inputs: 1, default_outputs: 1, sort_order: 70, description: 'End-user workstation or laptop.' },
+  { key: 'ap',            label: 'Access Point',  icon_key: 'ap',            default_inputs: 1, default_outputs: 4, sort_order: 80, description: 'Wi-Fi access point.' },
+  { key: 'cloud',         label: 'Cloud',         icon_key: 'cloud',         default_inputs: 1, default_outputs: 1, sort_order: 90, description: 'Public cloud region or external SaaS.' },
 ];
 
 const SEED_ZONES = [
@@ -82,17 +85,19 @@ const SEED_ZONES = [
 ];
 
 async function seed(table, rows) {
-  const { rows: existing } = await pool.query(`SELECT COUNT(*)::int AS n FROM ${table}`);
-  if (existing[0].n > 0) return;
+  let inserted = 0;
   for (const r of rows) {
     const cols = Object.keys(r);
     const vals = cols.map((_, i) => `$${i + 1}`);
-    await pool.query(
-      `INSERT INTO ${table} (${cols.join(', ')}) VALUES (${vals.join(', ')})`,
+    const { rowCount } = await pool.query(
+      `INSERT INTO ${table} (${cols.join(', ')})
+       VALUES (${vals.join(', ')})
+       ON CONFLICT (key) DO NOTHING`,
       cols.map((c) => r[c])
     );
+    inserted += rowCount;
   }
-  console.log(`[db] seeded ${rows.length} rows into ${table}`);
+  if (inserted > 0) console.log(`[db] inserted ${inserted} new rows into ${table}`);
 }
 
 export default async function initSchema() {

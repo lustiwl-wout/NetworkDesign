@@ -156,11 +156,67 @@ function Generic({ accent }) {
   );
 }
 
+function Hypervisor({ accent }) {
+  return (
+    <svg viewBox="0 0 64 64" width="100%" height="100%" role="img" aria-label="Hypervisor">
+      <rect x="6" y="42" width="52" height="16" rx="3" fill={accent} stroke={LIGHT} strokeWidth="2" />
+      <rect x="6" y="42" width="52" height="4" fill={LIGHT} opacity="0.2" />
+      <circle cx="14" cy="50" r="2" fill={LIGHT} />
+      <circle cx="20" cy="50" r="2" fill={LIGHT} opacity="0.5" />
+      <rect x="8"  y="6"  width="22" height="14" rx="2" fill={LIGHT} opacity="0.85" stroke={LIGHT} strokeWidth="1.5" />
+      <rect x="34" y="6"  width="22" height="14" rx="2" fill={LIGHT} opacity="0.55" stroke={LIGHT} strokeWidth="1.5" />
+      <rect x="8"  y="24" width="22" height="14" rx="2" fill={LIGHT} opacity="0.55" stroke={LIGHT} strokeWidth="1.5" />
+      <rect x="34" y="24" width="22" height="14" rx="2" fill={LIGHT} opacity="0.85" stroke={LIGHT} strokeWidth="1.5" />
+      <rect x="12" y="10" width="10" height="2" fill={accent} />
+      <rect x="38" y="10" width="10" height="2" fill={accent} />
+      <rect x="12" y="28" width="10" height="2" fill={accent} />
+      <rect x="38" y="28" width="10" height="2" fill={accent} />
+    </svg>
+  );
+}
+
+function VM({ accent }) {
+  return (
+    <svg viewBox="0 0 64 64" width="100%" height="100%" role="img" aria-label="Virtual Machine">
+      <rect x="6" y="10" width="52" height="44" rx="6"
+        fill={accent} stroke={LIGHT} strokeWidth="2"
+        strokeDasharray="4 3" />
+      <rect x="14" y="18" width="36" height="26" rx="3"
+        fill={DARK} stroke={LIGHT} strokeWidth="1.5" />
+      <rect x="14" y="18" width="36" height="6" fill={LIGHT} opacity="0.2" />
+      <circle cx="18" cy="21" r="1.2" fill={accent} />
+      <circle cx="22" cy="21" r="1.2" fill={LIGHT} opacity="0.6" />
+      <rect x="18" y="28" width="18" height="2" fill={LIGHT} opacity="0.7" />
+      <rect x="18" y="33" width="22" height="2" fill={LIGHT} opacity="0.45" />
+      <rect x="18" y="38" width="14" height="2" fill={LIGHT} opacity="0.45" />
+    </svg>
+  );
+}
+
+function Container({ accent }) {
+  return (
+    <svg viewBox="0 0 64 64" width="100%" height="100%" role="img" aria-label="Container">
+      <rect x="6"  y="22" width="14" height="14" fill={accent} stroke={LIGHT} strokeWidth="1.5" />
+      <rect x="22" y="22" width="14" height="14" fill={accent} stroke={LIGHT} strokeWidth="1.5" opacity="0.8" />
+      <rect x="38" y="22" width="14" height="14" fill={accent} stroke={LIGHT} strokeWidth="1.5" opacity="0.6" />
+      <rect x="14" y="38" width="14" height="14" fill={accent} stroke={LIGHT} strokeWidth="1.5" opacity="0.75" />
+      <rect x="30" y="38" width="14" height="14" fill={accent} stroke={LIGHT} strokeWidth="1.5" opacity="0.55" />
+      <path d="M8 12 Q32 4 56 12" stroke={LIGHT} strokeWidth="2" fill="none" />
+      <circle cx="14" cy="12" r="1.8" fill={LIGHT} />
+      <circle cx="32" cy="8"  r="1.8" fill={LIGHT} />
+      <circle cx="50" cy="12" r="1.8" fill={LIGHT} />
+    </svg>
+  );
+}
+
 export const ICON_META = {
   router:         { accent: '#38bdf8', Component: Router },
   switch:         { accent: '#14b8a6', Component: Switch },
   firewall:       { accent: '#ef4444', Component: Firewall },
   server:         { accent: '#a78bfa', Component: Server },
+  hypervisor:     { accent: '#7c3aed', Component: Hypervisor },
+  vm:             { accent: '#c084fc', Component: VM },
+  container:      { accent: '#2dd4bf', Component: Container },
   client:         { accent: '#64748b', Component: Client },
   cloud:          { accent: '#0ea5e9', Component: Cloud },
   ap:             { accent: '#22d3ee', Component: AccessPoint },

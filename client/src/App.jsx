@@ -13,6 +13,7 @@ import NetworkNode from './NetworkNode.jsx';
 import ZoneNode from './ZoneNode.jsx';
 import DeviceIcon from './DeviceIcons.jsx';
 import AdminPortal from './AdminPortal.jsx';
+import DesignsPage from './DesignsPage.jsx';
 import { TEMPLATES } from './templates/index.js';
 import { api } from './api.js';
 import { deviceTypesApi, zoneTypesApi } from './catalogApi.js';
@@ -37,20 +38,16 @@ function Editor() {
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [deviceTypes, setDeviceTypes] = useState([]);
   const [zoneTypes, setZoneTypes] = useState([]);
-  const [designs, setDesigns] = useState([]);
   const [currentId, setCurrentId] = useState(null);
   const [name, setName] = useState('Untitled design');
   const [selectedNode, setSelectedNode] = useState(null);
   const [selectedEdge, setSelectedEdge] = useState(null);
   const [toast, setToast] = useState(null);
   const [templateOpen, setTemplateOpen] = useState(false);
-  const [advanced, setAdvanced] = useState(false);
+  const [mode, setMode] = useState('management'); // 'management' | 'engineer'
   const wrapperRef = useRef(null);
   const { screenToFlowPosition } = useReactFlow();
 
-  const refreshList = useCallback(async () => {
-    try { setDesigns(await api.list()); } catch (e) { console.error(e); }
-  }, []);
   const refreshCatalogs = useCallback(async () => {
     try {
       const [d, z] = await Promise.all([deviceTypesApi.list(), zoneTypesApi.list()]);
@@ -59,7 +56,25 @@ function Editor() {
     } catch (e) { console.error('Failed to load catalogs', e); }
   }, []);
 
-  useEffect(() => { refreshList(); refreshCatalogs(); }, [refreshList, refreshCatalogs]);
+  useEffect(() => { refreshCatalogs(); }, [refreshCatalogs]);
+
+  // Deep-link: /?design=<id> auto-loads that design once catalogs are ready
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const designId = params.get('design');
+    if (!designId) return;
+    (async () => {
+      try {
+        const d = await api.get(designId);
+        setCurrentId(d.id);
+        setName(d.name);
+        setNodes(d.graph?.nodes ?? []);
+        setEdges(styleEdges(d.graph?.edges ?? []));
+      } catch (e) {
+        console.error('Failed to auto-load design:', e);
+      }
+    })();
+  }, [setNodes, setEdges]);
 
   const deviceByKey = useMemo(
     () => Object.fromEntries(deviceTypes.map((d) => [d.key, d])),
@@ -282,6 +297,16 @@ function Editor() {
           onChange={(e) => setName(e.target.value)}
           placeholder="Design name"
         />
+        <div className="mode-switch" role="tablist" aria-label="View mode">
+          <button
+            className={mode === 'management' ? 'active' : ''}
+            onClick={() => setMode('management')}
+          >Management</button>
+          <button
+            className={mode === 'engineer' ? 'active' : ''}
+            onClick={() => setMode('engineer')}
+          >Engineer</button>
+        </div>
         <div className="spacer" />
         <div className="menu">
           <button className="btn secondary" onClick={() => setTemplateOpen((v) => !v)}>
@@ -299,6 +324,7 @@ function Editor() {
           )}
         </div>
         <button className="btn secondary" onClick={newDesign}>New</button>
+        <a className="btn secondary" href="/designs">Designs</a>
         <button className="btn secondary" onClick={exportPng}>Export PNG</button>
         <button className="btn" onClick={saveDesign}>Save</button>
         {currentId && <button className="btn danger" onClick={deleteDesign}>Delete</button>}
@@ -337,14 +363,9 @@ function Editor() {
           </div>
         ))}
 
-        <h2>View</h2>
-        <label className="toggle-row">
-          <input type="checkbox" checked={advanced} onChange={(e) => setAdvanced(e.target.checked)} />
-          Show engineering details
-        </label>
       </aside>
 
-      <div className={`canvas${advanced ? '' : ' hide-ports'}`} ref={wrapperRef} onDrop={onDrop} onDragOver={onDragOver}>
+      <div className={`canvas mode-${mode}`} ref={wrapperRef} onDrop={onDrop} onDragOver={onDragOver}>
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -362,97 +383,77 @@ function Editor() {
           <Controls />
           <MiniMap pannable zoomable maskColor="rgba(15,23,42,0.6)" />
         </ReactFlow>
+        <SummaryPill summary={summary} />
+        {(selectedNode || selectedEdge) && (
+          <InspectorPopup onClose={() => { setSelectedNode(null); setSelectedEdge(null); }}>
+            {selectedNode && selectedNode.type === 'zone' && (
+              <ZoneInspector node={selectedNode} onChange={updateSelectedNode} onDelete={deleteSelected} />
+            )}
+            {selectedNode && selectedNode.type === 'device' && (
+              <NodeInspector
+                node={selectedNode}
+                mode={mode}
+                onChange={updateSelectedNode}
+                onPortChange={setPortCount}
+                onDelete={deleteSelected}
+              />
+            )}
+            {selectedEdge && (
+              <EdgeInspector
+                edge={selectedEdge}
+                mode={mode}
+                onChange={updateSelectedEdge}
+                onKindChange={changeEdgeKind}
+                onDelete={deleteSelected}
+              />
+            )}
+          </InspectorPopup>
+        )}
         {toast && <div className="toast">{toast}</div>}
       </div>
-
-      <aside className="sidebar">
-        <SummaryCard summary={summary} />
-
-        <h2>Designs</h2>
-        <ul className="design-list">
-          {designs.length === 0 && <li className="meta">No saved designs</li>}
-          {designs.map((d) => (
-            <li
-              key={d.id}
-              className={d.id === currentId ? 'active' : ''}
-              onClick={() => loadDesign(d.id)}
-            >
-              <span>{d.name}</span>
-              <span className="meta">{new Date(d.updated_at).toLocaleDateString()}</span>
-            </li>
-          ))}
-        </ul>
-
-        {selectedNode && selectedNode.type === 'zone' && (
-          <ZoneInspector node={selectedNode} onChange={updateSelectedNode} onDelete={deleteSelected} />
-        )}
-        {selectedNode && selectedNode.type === 'device' && (
-          <NodeInspector
-            node={selectedNode}
-            advanced={advanced}
-            onChange={updateSelectedNode}
-            onPortChange={setPortCount}
-            onDelete={deleteSelected}
-          />
-        )}
-        {selectedEdge && (
-          <EdgeInspector
-            edge={selectedEdge}
-            onChange={updateSelectedEdge}
-            onKindChange={changeEdgeKind}
-            onDelete={deleteSelected}
-          />
-        )}
-        {!selectedNode && !selectedEdge && (
-          <>
-            <h2>How to use</h2>
-            <p className="hint">
-              Drag <b>zones</b> first to frame the architecture (e.g. Production, IRE, Cloud),
-              then drop <b>devices</b> inside them. Click anything to edit it. Use <b>Templates</b>
-              to start from a reference design. Manage the device / zone catalog from the
-              <b> Admin</b> page.
-            </p>
-          </>
-        )}
-      </aside>
     </div>
   );
 }
 
-function SummaryCard({ summary }) {
-  const { riskCounts, phases, deviceCount } = summary;
+function InspectorPopup({ onClose, children }) {
   return (
-    <div className="summary">
-      <h2>Design summary</h2>
-      <div className="summary-row">
-        <span>Devices</span>
-        <strong>{deviceCount}</strong>
-      </div>
-      <div className="summary-row">
-        <span>Risk</span>
+    <div className="inspector-popup" onMouseDown={(e) => e.stopPropagation()}>
+      <button className="inspector-close" onClick={onClose} aria-label="Close">×</button>
+      {children}
+    </div>
+  );
+}
+
+function SummaryPill({ summary }) {
+  const { riskCounts, phases, deviceCount } = summary;
+  if (deviceCount === 0) return null;
+  return (
+    <div className="summary-pill">
+      <span><strong>{deviceCount}</strong> devices</span>
+      {(riskCounts.high || riskCounts.medium || riskCounts.low) > 0 && (
         <span className="risk-bar">
           <span className="rb-h" title={`${riskCounts.high} high`}>{riskCounts.high}</span>
           <span className="rb-m" title={`${riskCounts.medium} medium`}>{riskCounts.medium}</span>
           <span className="rb-l" title={`${riskCounts.low} low`}>{riskCounts.low}</span>
         </span>
-      </div>
+      )}
       {phases.length > 0 && (
-        <div className="summary-row">
-          <span>Phases</span>
-          <span>{phases.map(([p, c]) => `${p} (${c})`).join(' · ')}</span>
-        </div>
+        <span className="summary-pill-phases">
+          {phases.map(([p, c]) => `${p} ${c}`).join(' · ')}
+        </span>
       )}
     </div>
   );
 }
 
-function NodeInspector({ node, advanced, onChange, onPortChange, onDelete }) {
+function NodeInspector({ node, mode, onChange, onPortChange, onDelete }) {
   const d = node.data ?? {};
+  const engineer = mode === 'engineer';
   return (
     <>
-      <h2>Device</h2>
+      <h2>Device{engineer ? ' (engineer)' : ''}</h2>
       <label>Type</label>
-      <input value={d.typeKey ?? '—'} disabled />
+      <input value={d.typeKey ?? d.iconKey ?? '—'} disabled />
       <label>Label</label>
       <input value={d.label ?? ''} onChange={(e) => onChange({ label: e.target.value })} />
       <label>Capacity / detail</label>
@@ -481,14 +482,39 @@ function NodeInspector({ node, advanced, onChange, onPortChange, onDelete }) {
         </div>
       </div>
 
-      {advanced && (
+      {engineer && (
         <>
-          <label>IP</label>
+          <h2 style={{ marginTop: 14 }}>Engineering</h2>
+          <label>Hostname</label>
+          <input
+            value={d.hostname ?? ''}
+            onChange={(e) => onChange({ hostname: e.target.value })}
+            placeholder="dc-wms-01"
+          />
+          <label>IP / subnet</label>
           <input
             value={d.ip ?? ''}
             onChange={(e) => onChange({ ip: e.target.value })}
-            placeholder="10.0.0.1"
+            placeholder="10.20.30.10/24"
           />
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <div>
+              <label>VLAN</label>
+              <input
+                value={d.vlan ?? ''}
+                onChange={(e) => onChange({ vlan: e.target.value })}
+                placeholder="10"
+              />
+            </div>
+            <div>
+              <label>OS / model</label>
+              <input
+                value={d.model ?? ''}
+                onChange={(e) => onChange({ model: e.target.value })}
+                placeholder="RHEL 9 / C9300"
+              />
+            </div>
+          </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
             <div>
               <label>Input ports</label>
@@ -503,6 +529,12 @@ function NodeInspector({ node, advanced, onChange, onPortChange, onDelete }) {
                 onChange={(e) => onPortChange('outputs', e.target.value)} />
             </div>
           </div>
+          <label>Notes</label>
+          <textarea
+            rows="3"
+            value={d.notes ?? ''}
+            onChange={(e) => onChange({ notes: e.target.value })}
+          />
         </>
       )}
 
@@ -536,9 +568,12 @@ function ZoneInspector({ node, onChange, onDelete }) {
   );
 }
 
-function EdgeInspector({ edge, onChange, onKindChange, onDelete }) {
+function EdgeInspector({ edge, mode, onChange, onKindChange, onDelete }) {
   const kindKey = edge.data?.kind ?? 'network';
   const kind = EDGE_KINDS_BY_KEY[kindKey] ?? EDGE_KINDS_BY_KEY.network;
+  const engineer = mode === 'engineer';
+  const d = edge.data ?? {};
+  const setData = (patch) => onChange({ data: { ...d, ...patch } });
   return (
     <>
       <h2>Connection</h2>
@@ -554,15 +589,53 @@ function EdgeInspector({ edge, onChange, onKindChange, onDelete }) {
       <input
         value={edge.label ?? ''}
         onChange={(e) => onChange({ label: e.target.value })}
-        placeholder="1 Gbps, MPLS, One-way…"
+        placeholder="Primary · MPLS, Backup · 5G…"
       />
-      <label>
+      <label className="toggle-row">
         <input
           type="checkbox"
           checked={!!edge.animated}
           onChange={(e) => onChange({ animated: e.target.checked })}
         /> Animated flow
       </label>
+
+      <label>Line color (override)</label>
+      <input
+        type="color"
+        value={edge.style?.stroke ?? kind.style.stroke ?? '#94a3b8'}
+        onChange={(e) => onChange({ style: { ...(edge.style ?? {}), stroke: e.target.value } })}
+      />
+
+      {engineer && (
+        <>
+          <h2 style={{ marginTop: 14 }}>Engineering</h2>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <div>
+              <label>Bandwidth</label>
+              <input
+                value={d.bandwidth ?? ''}
+                onChange={(e) => setData({ bandwidth: e.target.value })}
+                placeholder="1 Gbps"
+              />
+            </div>
+            <div>
+              <label>VLAN</label>
+              <input
+                value={d.vlan ?? ''}
+                onChange={(e) => setData({ vlan: e.target.value })}
+                placeholder="10"
+              />
+            </div>
+          </div>
+          <label>Protocol / notes</label>
+          <input
+            value={d.protocol ?? ''}
+            onChange={(e) => setData({ protocol: e.target.value })}
+            placeholder="OSPF · BGP · IPsec"
+          />
+        </>
+      )}
+
       <div style={{ height: 8 }} />
       <button className="btn danger" onClick={onDelete}>Delete connection</button>
     </>
