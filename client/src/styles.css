@@ -377,17 +377,20 @@ html, body, #root {
   border-radius: 4px;
 }
 
-/* Port handles — hidden by default (Management mode), visible in Engineer mode */
+/* Four anchor points per device (top/right/bottom/left). Hidden at rest
+   so they don't add visual noise; surface on hover / selection so users
+   know where lines snap. Floating edges attach to the closest side
+   automatically — users rarely need to pick a specific anchor. */
 .port-handle {
-  width: 8px !important;
-  height: 8px !important;
-  border: 1.5px solid var(--text) !important;
+  width: 10px !important;
+  height: 10px !important;
+  border: 2px solid var(--text) !important;
   opacity: 0;
   pointer-events: auto;
-  transition: opacity 0.15s;
+  transition: opacity 0.12s;
 }
-.net-node:hover .port-handle { opacity: 0.6; }
-.net-node.selected .port-handle { opacity: 0.95; }
+.net-node:hover  .port-handle { opacity: 0.6; }
+.net-node.selected .port-handle { opacity: 1; }
 
 /* Zone node */
 .zone-node {
@@ -443,13 +446,10 @@ html, body, #root {
 }
 @keyframes dashdraw { to { stroke-dashoffset: -10; } }
 
-/* Stack order: zones (back) → devices → edges (top). This guarantees no
-   edge ever appears "behind" a device icon, regardless of routing. */
+/* Zones sit behind the edge layer; devices render above edges (React
+   Flow default) so icons remain the visual focus. No z-index gymnastics
+   beyond this. */
 .react-flow__node.react-flow__node-zone { z-index: -1 !important; }
-.react-flow__edges  { z-index: 3 !important; }
-.react-flow__node   { z-index: 2; }
-/* Keep handles clickable even though edges sit on top */
-.react-flow__handle { z-index: 4 !important; }
 
 .toast {
   position: absolute;

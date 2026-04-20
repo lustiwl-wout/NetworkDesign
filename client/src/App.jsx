@@ -142,10 +142,18 @@ function Editor({ me }) {
     setTimeout(() => setToast(null), 2200);
   };
 
-  const onConnect = useCallback(
-    (params) => setEdges((eds) => addEdge(applyKind({ ...params, id: `e_${Date.now().toString(36)}_${tmpId++}` }, 'network'), eds)),
-    [setEdges]
-  );
+  const onConnect = useCallback((params) => {
+    // Floating edges: strip the specific handle the user dragged from /
+    // onto, so the edge re-anchors to the closest side instead of stuck
+    // on whichever anchor happened to be under the cursor.
+    const edge = applyKind({
+      id: `e_${Date.now().toString(36)}_${tmpId++}`,
+      source: params.source,
+      target: params.target,
+      type: 'smart',
+    }, 'network');
+    setEdges((eds) => addEdge(edge, eds));
+  }, [setEdges]);
 
   const onDragOver = useCallback((event) => {
     event.preventDefault();
@@ -560,6 +568,7 @@ function Editor({ me }) {
           onPaneClick={() => { setSelectedNode(null); setSelectedEdge(null); setTemplateOpen(false); }}
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
+          connectionMode="loose"
           fitView
           deleteKeyCode={['Backspace', 'Delete']}
           defaultEdgeOptions={{ type: 'smart' }}

@@ -46,12 +46,12 @@ export const device = (id, iconKey, zoneId, col, row, data = {}) => ({
   data: { iconKey, inputs: 1, outputs: 1, ...data },
 });
 
+// Floating edges pick the closest side of each node automatically, so
+// we intentionally don't set sourceHandle / targetHandle.
 export const edge = (id, source, target, kind = 'network', extras = {}) => ({
   id,
   source,
   target,
-  sourceHandle: 'out-0',
-  targetHandle: 'in-0',
   type: 'smart',
   data: { kind },
   ...extras,

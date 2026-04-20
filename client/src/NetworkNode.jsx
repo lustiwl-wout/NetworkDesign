@@ -7,19 +7,20 @@ const RISK_COLORS = {
   high: '#ef4444',
 };
 
-function portOffsets(count) {
-  if (count <= 0) return [];
-  if (count === 1) return ['50%'];
-  const step = 100 / (count + 1);
-  return Array.from({ length: count }, (_, i) => `${step * (i + 1)}%`);
-}
+// Four fixed anchor points per device — one centered on each side.
+// Both source and target (so edges can enter or leave from any side).
+// Floating edges pick whichever side is closest to the other endpoint.
+const SIDES = [
+  { id: 't', pos: Position.Top },
+  { id: 'r', pos: Position.Right },
+  { id: 'b', pos: Position.Bottom },
+  { id: 'l', pos: Position.Left },
+];
 
 export default function NetworkNode({ data, selected }) {
   const iconKey = data?.iconKey ?? 'generic';
-  const inputs  = data?.inputs  ?? 1;
-  const outputs = data?.outputs ?? 1;
-  const risk    = data?.risk;
-  const accent  = iconAccent(iconKey);
+  const risk = data?.risk;
+  const accent = iconAccent(iconKey);
 
   const style = {
     borderColor: selected ? accent : `${accent}55`,
@@ -38,31 +39,21 @@ export default function NetworkNode({ data, selected }) {
         </span>
       )}
 
-      {portOffsets(inputs).map((top, i) => (
+      {SIDES.map((s) => (
         <Handle
-          key={`in-${i}`}
-          type="target"
-          position={Position.Left}
-          id={`in-${i}`}
-          style={{ top, background: accent, borderColor: '#e2e8f0' }}
+          key={s.id}
+          id={s.id}
+          type="source"
+          position={s.pos}
           className="port-handle"
+          style={{ background: accent, borderColor: '#e2e8f0' }}
+          isConnectable
         />
       ))}
 
       <div className="icon-wrap"><DeviceIcon iconKey={iconKey} size={72} /></div>
       <div className="label">{data?.label ?? 'Device'}</div>
       {data?.capacity && <div className="sub">{data.capacity}</div>}
-
-      {portOffsets(outputs).map((top, i) => (
-        <Handle
-          key={`out-${i}`}
-          type="source"
-          position={Position.Right}
-          id={`out-${i}`}
-          style={{ top, background: accent, borderColor: '#e2e8f0' }}
-          className="port-handle"
-        />
-      ))}
     </div>
   );
 }
