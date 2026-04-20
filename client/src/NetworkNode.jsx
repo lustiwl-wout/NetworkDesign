@@ -1,6 +1,5 @@
 import { Handle, Position } from 'reactflow';
-import DeviceIcon from './DeviceIcons.jsx';
-import { CATALOG_BY_TYPE } from './nodeTypes.js';
+import DeviceIcon, { iconAccent } from './DeviceIcons.jsx';
 
 const RISK_COLORS = {
   low: '#22c55e',
@@ -15,26 +14,29 @@ function portOffsets(count) {
   return Array.from({ length: count }, (_, i) => `${step * (i + 1)}%`);
 }
 
-function formatCurrency(n) {
-  if (n == null || n === '') return null;
-  const v = Number(n);
-  if (!Number.isFinite(v)) return null;
-  if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)}M/yr`;
-  if (v >= 1_000) return `$${(v / 1_000).toFixed(0)}k/yr`;
-  return `$${v}/yr`;
-}
-
-export default function NetworkNode({ data, type, selected }) {
-  const meta = CATALOG_BY_TYPE[type] ?? { label: type, defaultInputs: 1, defaultOutputs: 1 };
-  const inputs  = data?.inputs  ?? meta.defaultInputs;
-  const outputs = data?.outputs ?? meta.defaultOutputs;
+export default function NetworkNode({ data, selected }) {
+  const iconKey = data?.iconKey ?? 'generic';
+  const inputs  = data?.inputs  ?? 1;
+  const outputs = data?.outputs ?? 1;
   const risk    = data?.risk;
-  const cost    = formatCurrency(data?.costAnnual);
+  const accent  = iconAccent(iconKey);
+
+  const style = {
+    borderColor: selected ? accent : `${accent}55`,
+    background: `linear-gradient(180deg, ${accent}1f 0%, ${accent}0a 60%, transparent 100%), #1e293b`,
+    boxShadow: selected
+      ? `0 0 0 2px ${accent}66, 0 4px 14px rgba(0,0,0,0.45)`
+      : `0 3px 10px rgba(0,0,0,0.35)`,
+  };
 
   return (
-    <div className={`net-node${selected ? ' selected' : ''}`}>
+    <div className={`net-node${selected ? ' selected' : ''}`} style={style}>
       {risk && <span className="risk-dot" style={{ background: RISK_COLORS[risk] }} title={`Risk: ${risk}`} />}
-      {data?.phase && <span className="phase-badge">{data.phase}</span>}
+      {data?.phase && (
+        <span className="phase-badge" style={{ borderColor: `${accent}88`, color: accent }}>
+          {data.phase}
+        </span>
+      )}
 
       {portOffsets(inputs).map((top, i) => (
         <Handle
@@ -42,16 +44,16 @@ export default function NetworkNode({ data, type, selected }) {
           type="target"
           position={Position.Left}
           id={`in-${i}`}
-          style={{ top }}
+          style={{ top, background: accent, borderColor: '#e2e8f0' }}
           className="port-handle"
         />
       ))}
 
-      <DeviceIcon type={type} size={44} />
-      <div className="label">{data?.label ?? meta.label}</div>
-      {data?.ip && <div className="sub">{data.ip}</div>}
-      {data?.capacity && <div className="sub">{data.capacity}</div>}
-      {cost && <div className="sub cost">{cost}</div>}
+      <div className="icon-wrap"><DeviceIcon iconKey={iconKey} size={72} /></div>
+      <div className="label">{data?.label ?? 'Device'}</div>
+      {(data?.capacity || data?.ip) && (
+        <div className="sub">{data.capacity || data.ip}</div>
+      )}
 
       {portOffsets(outputs).map((top, i) => (
         <Handle
@@ -59,7 +61,7 @@ export default function NetworkNode({ data, type, selected }) {
           type="source"
           position={Position.Right}
           id={`out-${i}`}
-          style={{ top }}
+          style={{ top, background: accent, borderColor: '#e2e8f0' }}
           className="port-handle"
         />
       ))}

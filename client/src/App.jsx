@@ -10,25 +10,33 @@ import ReactFlow, {
   useReactFlow,
 } from 'reactflow';
 import NetworkNode from './NetworkNode.jsx';
-import ZoneNode, { ZONE_PRESETS } from './ZoneNode.jsx';
+import ZoneNode from './ZoneNode.jsx';
 import DeviceIcon from './DeviceIcons.jsx';
-import { NODE_CATALOG, CATALOG_BY_TYPE } from './nodeTypes.js';
+import AdminPortal from './AdminPortal.jsx';
 import { TEMPLATES } from './templates/index.js';
 import { api } from './api.js';
+import { deviceTypesApi, zoneTypesApi } from './catalogApi.js';
+import { EDGE_KINDS, EDGE_KINDS_BY_KEY, applyKind } from './edgePresets.js';
 import { exportCanvasPng } from './exportImage.js';
 
-const nodeTypes = {
-  ...Object.fromEntries(NODE_CATALOG.map((n) => [n.type, NetworkNode])),
-  zone: ZoneNode,
-};
+const nodeTypes = { device: NetworkNode, zone: ZoneNode };
 
 let tmpId = 1;
 const nextId = () => `n_${Date.now().toString(36)}_${tmpId++}`;
 const cloneGraph = (g) => JSON.parse(JSON.stringify(g));
 
+function styleEdges(edges) {
+  return edges.map((e) => {
+    const kind = e.data?.kind ?? 'network';
+    return applyKind(e, kind);
+  });
+}
+
 function Editor() {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const [deviceTypes, setDeviceTypes] = useState([]);
+  const [zoneTypes, setZoneTypes] = useState([]);
   const [designs, setDesigns] = useState([]);
   const [currentId, setCurrentId] = useState(null);
   const [name, setName] = useState('Untitled design');
@@ -43,8 +51,24 @@ function Editor() {
   const refreshList = useCallback(async () => {
     try { setDesigns(await api.list()); } catch (e) { console.error(e); }
   }, []);
+  const refreshCatalogs = useCallback(async () => {
+    try {
+      const [d, z] = await Promise.all([deviceTypesApi.list(), zoneTypesApi.list()]);
+      setDeviceTypes(d);
+      setZoneTypes(z);
+    } catch (e) { console.error('Failed to load catalogs', e); }
+  }, []);
 
-  useEffect(() => { refreshList(); }, [refreshList]);
+  useEffect(() => { refreshList(); refreshCatalogs(); }, [refreshList, refreshCatalogs]);
+
+  const deviceByKey = useMemo(
+    () => Object.fromEntries(deviceTypes.map((d) => [d.key, d])),
+    [deviceTypes]
+  );
+  const zoneByKey = useMemo(
+    () => Object.fromEntries(zoneTypes.map((z) => [z.key, z])),
+    [zoneTypes]
+  );
 
   const flash = (msg) => {
     setToast(msg);
@@ -52,7 +76,7 @@ function Editor() {
   };
 
   const onConnect = useCallback(
-    (params) => setEdges((eds) => addEdge({ ...params, animated: false, label: '' }, eds)),
+    (params) => setEdges((eds) => addEdge(applyKind({ ...params, id: `e_${Date.now().toString(36)}_${tmpId++}` }, 'network'), eds)),
     [setEdges]
   );
 
@@ -70,32 +94,40 @@ function Editor() {
       const position = screenToFlowPosition({ x: event.clientX, y: event.clientY });
 
       if (kind === 'device') {
-        const meta = CATALOG_BY_TYPE[value];
+        const d = deviceByKey[value];
+        if (!d) return;
         setNodes((nds) => nds.concat({
           id: nextId(),
-          type: value,
+          type: 'device',
           position,
           data: {
-            label: meta.label,
+            iconKey: d.iconKey,
+            label: d.label,
+            typeKey: d.key,
             ip: '',
-            inputs: meta.defaultInputs,
-            outputs: meta.defaultOutputs,
-            costAnnual: null,
-            capacity: '',
-            risk: null,
+            inputs: d.defaultInputs,
+            outputs: d.defaultOutputs,
+            capacity: d.defaultCapacity ?? '',
+            risk: d.defaultRisk ?? null,
             phase: null,
           },
         }));
       } else if (kind === 'zone') {
-        const preset = ZONE_PRESETS[value];
+        const z = zoneByKey[value];
+        if (!z) return;
         setNodes((nds) => [
-          { id: nextId(), type: 'zone', position, style: { width: 360, height: 240 },
-            data: { preset: value, label: preset.label } },
+          {
+            id: nextId(),
+            type: 'zone',
+            position,
+            style: { width: z.defaultWidth, height: z.defaultHeight },
+            data: { typeKey: z.key, label: z.label, color: z.color, sublabel: '' },
+          },
           ...nds,
         ]);
       }
     },
-    [screenToFlowPosition, setNodes]
+    [screenToFlowPosition, setNodes, deviceByKey, zoneByKey]
   );
 
   const onPaletteDragStart = (event, kind, value) => {
@@ -117,7 +149,7 @@ function Editor() {
     setCurrentId(null);
     setName(tpl.name);
     setNodes(g.nodes);
-    setEdges(g.edges);
+    setEdges(styleEdges(g.edges));
     setSelectedNode(null);
     setSelectedEdge(null);
     setTemplateOpen(false);
@@ -130,7 +162,7 @@ function Editor() {
       setCurrentId(d.id);
       setName(d.name);
       setNodes(d.graph?.nodes ?? []);
-      setEdges(d.graph?.edges ?? []);
+      setEdges(styleEdges(d.graph?.edges ?? []));
       flash(`Loaded "${d.name}"`);
     } catch (e) { flash(`Load failed: ${e.message}`); }
   };
@@ -202,6 +234,12 @@ function Editor() {
     setSelectedEdge((e) => ({ ...e, ...patch }));
   };
 
+  const changeEdgeKind = (kindKey) => {
+    if (!selectedEdge) return;
+    setEdges((eds) => eds.map((e) => (e.id === selectedEdge.id ? applyKind(e, kindKey) : e)));
+    setSelectedEdge((e) => applyKind(e, kindKey));
+  };
+
   const deleteSelected = () => {
     if (selectedNode) {
       setNodes((nds) => nds.filter((n) => n.id !== selectedNode.id));
@@ -214,31 +252,25 @@ function Editor() {
   };
 
   const summary = useMemo(() => {
-    let annualCost = 0;
     const riskCounts = { low: 0, medium: 0, high: 0 };
     const phases = new Map();
     let deviceCount = 0;
     for (const n of nodes) {
       if (n.type === 'zone') continue;
       deviceCount++;
-      const c = Number(n.data?.costAnnual);
-      if (Number.isFinite(c)) annualCost += c;
       if (n.data?.risk && riskCounts[n.data.risk] != null) riskCounts[n.data.risk]++;
       const p = n.data?.phase;
       if (p) phases.set(p, (phases.get(p) ?? 0) + 1);
     }
-    return { annualCost, riskCounts, phases: [...phases.entries()], deviceCount };
+    return { riskCounts, phases: [...phases.entries()], deviceCount };
   }, [nodes]);
 
   const summarySubtitle = () => {
     const parts = [`${summary.deviceCount} devices`];
-    if (summary.annualCost > 0) parts.push(fmtMoney(summary.annualCost));
     if (summary.riskCounts.high) parts.push(`${summary.riskCounts.high} high-risk`);
+    if (summary.phases.length) parts.push(summary.phases.map(([p, c]) => `${p} (${c})`).join(' · '));
     return parts.join(' · ');
   };
-
-  const catalog = useMemo(() => NODE_CATALOG, []);
-  const zonePresets = Object.entries(ZONE_PRESETS);
 
   return (
     <div className="app">
@@ -270,33 +302,38 @@ function Editor() {
         <button className="btn secondary" onClick={exportPng}>Export PNG</button>
         <button className="btn" onClick={saveDesign}>Save</button>
         {currentId && <button className="btn danger" onClick={deleteDesign}>Delete</button>}
+        <a className="btn secondary" href="/admin" title="Admin portal">⚙︎ Admin</a>
       </div>
 
       <aside className="palette">
         <h2>Zones</h2>
-        {zonePresets.map(([key, p]) => (
+        {zoneTypes.length === 0 && <div className="hint small">Loading…</div>}
+        {zoneTypes.map((z) => (
           <div
-            key={key}
+            key={z.key}
             className="palette-item zone-chip"
             draggable
-            onDragStart={(e) => onPaletteDragStart(e, 'zone', key)}
-            style={{ borderColor: p.color }}
+            onDragStart={(e) => onPaletteDragStart(e, 'zone', z.key)}
+            style={{ borderColor: z.color }}
+            title={z.description}
           >
-            <span className="zone-swatch" style={{ background: p.color }} />
-            <span>{p.label}</span>
+            <span className="zone-swatch" style={{ background: z.color }} />
+            <span>{z.label}</span>
           </div>
         ))}
 
         <h2>Devices</h2>
-        {catalog.map((n) => (
+        {deviceTypes.length === 0 && <div className="hint small">Loading…</div>}
+        {deviceTypes.map((d) => (
           <div
-            key={n.type}
+            key={d.key}
             className="palette-item"
             draggable
-            onDragStart={(e) => onPaletteDragStart(e, 'device', n.type)}
+            onDragStart={(e) => onPaletteDragStart(e, 'device', d.key)}
+            title={d.description}
           >
-            <DeviceIcon type={n.type} size={28} />
-            <span>{n.label}</span>
+            <DeviceIcon iconKey={d.iconKey} size={28} />
+            <span>{d.label}</span>
           </div>
         ))}
 
@@ -349,8 +386,7 @@ function Editor() {
         {selectedNode && selectedNode.type === 'zone' && (
           <ZoneInspector node={selectedNode} onChange={updateSelectedNode} onDelete={deleteSelected} />
         )}
-
-        {selectedNode && selectedNode.type !== 'zone' && (
+        {selectedNode && selectedNode.type === 'device' && (
           <NodeInspector
             node={selectedNode}
             advanced={advanced}
@@ -359,18 +395,22 @@ function Editor() {
             onDelete={deleteSelected}
           />
         )}
-
         {selectedEdge && (
-          <EdgeInspector edge={selectedEdge} onChange={updateSelectedEdge} onDelete={deleteSelected} />
+          <EdgeInspector
+            edge={selectedEdge}
+            onChange={updateSelectedEdge}
+            onKindChange={changeEdgeKind}
+            onDelete={deleteSelected}
+          />
         )}
-
         {!selectedNode && !selectedEdge && (
           <>
             <h2>How to use</h2>
             <p className="hint">
               Drag <b>zones</b> first to frame the architecture (e.g. Production, IRE, Cloud),
-              then drop <b>devices</b> inside them. Click anything to edit its label, cost,
-              capacity, risk, and phase. Use <b>Templates</b> to start from a reference design.
+              then drop <b>devices</b> inside them. Click anything to edit it. Use <b>Templates</b>
+              to start from a reference design. Manage the device / zone catalog from the
+              <b> Admin</b> page.
             </p>
           </>
         )}
@@ -380,17 +420,13 @@ function Editor() {
 }
 
 function SummaryCard({ summary }) {
-  const { annualCost, riskCounts, phases, deviceCount } = summary;
+  const { riskCounts, phases, deviceCount } = summary;
   return (
     <div className="summary">
-      <h2>Business summary</h2>
+      <h2>Design summary</h2>
       <div className="summary-row">
         <span>Devices</span>
         <strong>{deviceCount}</strong>
-      </div>
-      <div className="summary-row">
-        <span>Annual cost</span>
-        <strong>{annualCost > 0 ? fmtMoney(annualCost) : '—'}</strong>
       </div>
       <div className="summary-row">
         <span>Risk</span>
@@ -416,7 +452,7 @@ function NodeInspector({ node, advanced, onChange, onPortChange, onDelete }) {
     <>
       <h2>Device</h2>
       <label>Type</label>
-      <input value={node.type} disabled />
+      <input value={d.typeKey ?? '—'} disabled />
       <label>Label</label>
       <input value={d.label ?? ''} onChange={(e) => onChange({ label: e.target.value })} />
       <label>Capacity / detail</label>
@@ -424,15 +460,6 @@ function NodeInspector({ node, advanced, onChange, onPortChange, onDelete }) {
         value={d.capacity ?? ''}
         onChange={(e) => onChange({ capacity: e.target.value })}
         placeholder="500 users, 10 Gbps, 40 TB…"
-      />
-      <label>Annual cost (USD)</label>
-      <input
-        type="number"
-        min="0"
-        step="1000"
-        value={d.costAnnual ?? ''}
-        onChange={(e) => onChange({ costAnnual: e.target.value === '' ? null : Number(e.target.value) })}
-        placeholder="0"
       />
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
         <div>
@@ -465,19 +492,15 @@ function NodeInspector({ node, advanced, onChange, onPortChange, onDelete }) {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
             <div>
               <label>Input ports</label>
-              <input
-                type="number" min="0" max="64"
+              <input type="number" min="0" max="64"
                 value={d.inputs ?? 0}
-                onChange={(e) => onPortChange('inputs', e.target.value)}
-              />
+                onChange={(e) => onPortChange('inputs', e.target.value)} />
             </div>
             <div>
               <label>Output ports</label>
-              <input
-                type="number" min="0" max="64"
+              <input type="number" min="0" max="64"
                 value={d.outputs ?? 0}
-                onChange={(e) => onPortChange('outputs', e.target.value)}
-              />
+                onChange={(e) => onPortChange('outputs', e.target.value)} />
             </div>
           </div>
         </>
@@ -504,19 +527,29 @@ function ZoneInspector({ node, onChange, onDelete }) {
       <label>Color</label>
       <input
         type="color"
-        value={d.color ?? ZONE_PRESETS[d.preset ?? 'generic'].color}
+        value={d.color ?? '#38bdf8'}
         onChange={(e) => onChange({ color: e.target.value })}
       />
-      <p className="hint">Drag the corner to resize. Zones sit behind devices and won't be moved with them.</p>
+      <p className="hint">Drag the corner to resize. Zones sit behind devices.</p>
       <button className="btn danger" onClick={onDelete}>Delete zone</button>
     </>
   );
 }
 
-function EdgeInspector({ edge, onChange, onDelete }) {
+function EdgeInspector({ edge, onChange, onKindChange, onDelete }) {
+  const kindKey = edge.data?.kind ?? 'network';
+  const kind = EDGE_KINDS_BY_KEY[kindKey] ?? EDGE_KINDS_BY_KEY.network;
   return (
     <>
       <h2>Connection</h2>
+      <label>Connection kind</label>
+      <select value={kindKey} onChange={(e) => onKindChange(e.target.value)}>
+        {EDGE_KINDS.map((k) => (
+          <option key={k.key} value={k.key}>{k.label}</option>
+        ))}
+      </select>
+      <p className="hint small">{kind.description}</p>
+
       <label>Label</label>
       <input
         value={edge.label ?? ''}
@@ -536,16 +569,14 @@ function EdgeInspector({ edge, onChange, onDelete }) {
   );
 }
 
-function fmtMoney(v) {
-  if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)}M/yr`;
-  if (v >= 1_000) return `$${(v / 1_000).toFixed(0)}k/yr`;
-  return `$${v}/yr`;
-}
-
-export default function App() {
+function Root() {
+  const path = typeof window !== 'undefined' ? window.location.pathname : '/';
+  if (path.startsWith('/admin')) return <AdminPortal />;
   return (
     <ReactFlowProvider>
       <Editor />
     </ReactFlowProvider>
   );
 }
+
+export default function App() { return <Root />; }

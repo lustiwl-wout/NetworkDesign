@@ -10,6 +10,34 @@ CREATE TABLE IF NOT EXISTS designs (
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS device_types (
+  id               SERIAL PRIMARY KEY,
+  key              TEXT NOT NULL UNIQUE,
+  label            TEXT NOT NULL,
+  icon_key         TEXT NOT NULL DEFAULT 'router',
+  default_inputs   INTEGER NOT NULL DEFAULT 1,
+  default_outputs  INTEGER NOT NULL DEFAULT 1,
+  default_capacity TEXT DEFAULT '',
+  default_risk     TEXT,
+  description      TEXT DEFAULT '',
+  sort_order       INTEGER NOT NULL DEFAULT 0,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS zone_types (
+  id              SERIAL PRIMARY KEY,
+  key             TEXT NOT NULL UNIQUE,
+  label           TEXT NOT NULL,
+  color           TEXT NOT NULL DEFAULT '#38bdf8',
+  description     TEXT DEFAULT '',
+  default_width   INTEGER NOT NULL DEFAULT 360,
+  default_height  INTEGER NOT NULL DEFAULT 240,
+  sort_order      INTEGER NOT NULL DEFAULT 0,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE OR REPLACE FUNCTION touch_updated_at() RETURNS trigger AS $$
 BEGIN
   NEW.updated_at = now();
@@ -19,11 +47,57 @@ $$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS designs_touch_updated_at ON designs;
 CREATE TRIGGER designs_touch_updated_at
-  BEFORE UPDATE ON designs
-  FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
+  BEFORE UPDATE ON designs FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
+
+DROP TRIGGER IF EXISTS device_types_touch_updated_at ON device_types;
+CREATE TRIGGER device_types_touch_updated_at
+  BEFORE UPDATE ON device_types FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
+
+DROP TRIGGER IF EXISTS zone_types_touch_updated_at ON zone_types;
+CREATE TRIGGER zone_types_touch_updated_at
+  BEFORE UPDATE ON zone_types FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
 `;
+
+const SEED_DEVICES = [
+  { key: 'router',        label: 'Router',        icon_key: 'router',        default_inputs: 2, default_outputs: 4, sort_order: 10, description: 'Layer-3 forwarding between networks.' },
+  { key: 'switch',        label: 'Switch',        icon_key: 'switch',        default_inputs: 1, default_outputs: 8, sort_order: 20, description: 'Layer-2 port aggregation for devices on the same VLAN.' },
+  { key: 'firewall',      label: 'Firewall',      icon_key: 'firewall',      default_inputs: 1, default_outputs: 1, sort_order: 30, description: 'Traffic filtering between security zones.' },
+  { key: 'server',        label: 'Server',        icon_key: 'server',        default_inputs: 1, default_outputs: 1, sort_order: 40, description: 'Compute host (physical or VM).' },
+  { key: 'client',        label: 'Client',        icon_key: 'client',        default_inputs: 1, default_outputs: 1, sort_order: 50, description: 'End-user workstation or laptop.' },
+  { key: 'cloud',         label: 'Cloud',         icon_key: 'cloud',         default_inputs: 1, default_outputs: 1, sort_order: 60, description: 'Public cloud region or external service.' },
+  { key: 'ap',            label: 'Access Point',  icon_key: 'ap',            default_inputs: 1, default_outputs: 4, sort_order: 70, description: 'Wi-Fi access point.' },
+  { key: 'database',      label: 'Database',      icon_key: 'database',      default_inputs: 1, default_outputs: 0, sort_order: 80, description: 'Persistent data store (RDBMS, NoSQL, object storage).' },
+  { key: 'load-balancer', label: 'Load Balancer', icon_key: 'load-balancer', default_inputs: 1, default_outputs: 4, sort_order: 90, description: 'Distributes traffic across backend pools.' },
+];
+
+const SEED_ZONES = [
+  { key: 'production', label: 'Production',                    color: '#3b82f6', sort_order: 10, description: 'Live business-serving environment.' },
+  { key: 'dmz',        label: 'DMZ',                           color: '#f59e0b', sort_order: 20, description: 'Perimeter network for externally exposed services.' },
+  { key: 'cloud',      label: 'Cloud',                         color: '#8b5cf6', sort_order: 30, description: 'Public cloud region (AWS/Azure/GCP).' },
+  { key: 'ire',        label: 'Isolated Recovery Environment', color: '#22c55e', sort_order: 40, description: 'Air-gapped vault for cyber-resilient recovery.' },
+  { key: 'airgap',     label: 'Air Gap',                       color: '#64748b', sort_order: 50, description: 'Controlled, typically one-way transfer channel.' },
+  { key: 'branch',     label: 'Branch',                        color: '#06b6d4', sort_order: 60, description: 'Remote office or site.' },
+  { key: 'management', label: 'Management',                    color: '#94a3b8', sort_order: 70, description: 'Out-of-band administrative plane.' },
+  { key: 'generic',    label: 'Zone',                          color: '#38bdf8', sort_order: 80, description: 'Generic labeled container.' },
+];
+
+async function seed(table, rows) {
+  const { rows: existing } = await pool.query(`SELECT COUNT(*)::int AS n FROM ${table}`);
+  if (existing[0].n > 0) return;
+  for (const r of rows) {
+    const cols = Object.keys(r);
+    const vals = cols.map((_, i) => `$${i + 1}`);
+    await pool.query(
+      `INSERT INTO ${table} (${cols.join(', ')}) VALUES (${vals.join(', ')})`,
+      cols.map((c) => r[c])
+    );
+  }
+  console.log(`[db] seeded ${rows.length} rows into ${table}`);
+}
 
 export default async function initSchema() {
   await pool.query(SCHEMA);
+  await seed('device_types', SEED_DEVICES);
+  await seed('zone_types', SEED_ZONES);
   console.log('[db] schema ensured');
 }

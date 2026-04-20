@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import 'dotenv/config';
 import { designsRouter } from './routes/designs.js';
+import { deviceTypesRouter, zoneTypesRouter } from './routes/catalog.js';
 import { pool } from './db/pool.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -22,6 +23,8 @@ app.get('/api/health', async (_req, res) => {
 });
 
 app.use('/api/designs', designsRouter);
+app.use('/api/device-types', deviceTypesRouter);
+app.use('/api/zone-types', zoneTypesRouter);
 
 const clientDist = path.resolve(__dirname, '..', 'client', 'dist');
 app.use(express.static(clientDist));

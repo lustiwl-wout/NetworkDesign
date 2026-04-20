@@ -1,15 +1,26 @@
-const prod = (id, type, x, y, data = {}) => ({
+const device = (id, iconKey, x, y, data = {}) => ({
   id,
-  type,
+  type: 'device',
   position: { x, y },
-  data: { phase: 'Current', ...data },
+  data: { iconKey, inputs: 1, outputs: 1, ...data },
 });
 
-const ire = (id, type, x, y, data = {}) => ({
+const zone = (id, x, y, width, height, data) => ({
   id,
-  type,
+  type: 'zone',
   position: { x, y },
-  data: { phase: 'Proposed', ...data },
+  style: { width, height },
+  data,
+});
+
+const edge = (id, source, target, kind = 'network', extras = {}) => ({
+  id,
+  source,
+  target,
+  sourceHandle: 'out-0',
+  targetHandle: 'in-0',
+  data: { kind },
+  ...extras,
 });
 
 export default {
@@ -19,157 +30,41 @@ export default {
     'Cyber-resilient recovery architecture: production replicates one-way into an air-gapped vault containing immutable backups, a clean-room recovery environment, and forensic tooling. Aligns with NIST SP 800-209 and Sheltered Harbor guidance.',
   graph: {
     nodes: [
-      {
-        id: 'zone-prod',
-        type: 'zone',
-        position: { x: 0, y: 0 },
-        style: { width: 520, height: 420 },
-        data: { preset: 'production', label: 'Production', sublabel: 'Live business services' },
-      },
-      {
-        id: 'zone-airgap',
-        type: 'zone',
-        position: { x: 560, y: 60 },
-        style: { width: 220, height: 320 },
-        data: {
-          preset: 'airgap',
-          label: 'Air Gap',
-          sublabel: 'One-way replication, scheduled',
-        },
-      },
-      {
-        id: 'zone-ire',
-        type: 'zone',
-        position: { x: 820, y: 0 },
-        style: { width: 620, height: 520 },
-        data: {
-          preset: 'ire',
-          label: 'Isolated Recovery Environment',
-          sublabel: 'Immutable · Air-gapped · Clean room',
-        },
-      },
-      {
-        id: 'zone-mgmt',
-        type: 'zone',
-        position: { x: 820, y: 540 },
-        style: { width: 620, height: 140 },
-        data: { preset: 'management', label: 'Out-of-Band Management' },
-      },
+      zone('zone-prod',   0,   0, 520, 420, { color: '#3b82f6', label: 'Production',                    sublabel: 'Live business services' }),
+      zone('zone-airgap', 560, 60, 220, 320, { color: '#64748b', label: 'Air Gap',                       sublabel: 'One-way replication, scheduled' }),
+      zone('zone-ire',    820,  0, 620, 520, { color: '#22c55e', label: 'Isolated Recovery Environment', sublabel: 'Immutable · Air-gapped · Clean room' }),
+      zone('zone-mgmt',   820, 540, 620, 140, { color: '#94a3b8', label: 'Out-of-Band Management' }),
 
-      prod('prod-db', 'database', 60, 70, {
-        label: 'Production DB',
-        capacity: '40 TB',
-        costAnnual: 260000,
-        risk: 'high',
-      }),
-      prod('prod-app', 'server', 220, 70, {
-        label: 'Application Tier',
-        capacity: '120 VMs',
-        costAnnual: 180000,
-        risk: 'medium',
-      }),
-      prod('prod-sw', 'switch', 140, 200, {
-        label: 'Core Switch',
-        costAnnual: 18000,
-        risk: 'medium',
-      }),
-      prod('prod-backup', 'server', 340, 200, {
-        label: 'Backup Source',
-        capacity: 'Proxy / media server',
-        costAnnual: 45000,
-        risk: 'medium',
-      }),
-      prod('prod-fw', 'firewall', 220, 320, {
-        label: 'Perimeter Firewall',
-        costAnnual: 35000,
-        risk: 'medium',
-      }),
+      device('prod-db',     'database', 60,  70, { label: 'Production DB',     capacity: '40 TB',              risk: 'high',   phase: 'Current', inputs: 2, outputs: 1 }),
+      device('prod-app',    'server',   220, 70, { label: 'Application Tier', capacity: '120 VMs',            risk: 'medium', phase: 'Current', inputs: 1, outputs: 1 }),
+      device('prod-sw',     'switch',   140, 200,{ label: 'Core Switch',                                      risk: 'medium', phase: 'Current', inputs: 4, outputs: 4 }),
+      device('prod-backup', 'server',   340, 200,{ label: 'Backup Source',    capacity: 'Proxy / media srv',  risk: 'medium', phase: 'Current', inputs: 1, outputs: 1 }),
+      device('prod-fw',     'firewall', 220, 320,{ label: 'Perimeter Firewall',                              risk: 'medium', phase: 'Current', inputs: 1, outputs: 1 }),
 
-      ire('ire-fw', 'firewall', 880, 70, {
-        label: 'Vault Firewall',
-        capacity: 'Ingress-only, allow-list',
-        costAnnual: 30000,
-        risk: 'low',
-      }),
-      ire('ire-sw', 'switch', 1050, 200, {
-        label: 'Vault Switch',
-        capacity: 'Isolated VLAN',
-        costAnnual: 12000,
-        risk: 'low',
-      }),
-      ire('ire-vault', 'database', 880, 320, {
-        label: 'Immutable Backup Vault',
-        capacity: '500 TB · Object Lock',
-        costAnnual: 180000,
-        risk: 'low',
-      }),
-      ire('ire-recovery', 'server', 1060, 320, {
-        label: 'Clean-room Recovery',
-        capacity: '8 restore VMs',
-        costAnnual: 60000,
-        risk: 'low',
-      }),
-      ire('ire-forensic', 'client', 1240, 320, {
-        label: 'Forensic Workstation',
-        capacity: 'Malware analysis',
-        costAnnual: 15000,
-        risk: 'low',
-      }),
+      device('ire-fw',       'firewall', 880, 70,  { label: 'Vault Firewall',        capacity: 'Ingress-only, allow-list', risk: 'low', phase: 'Proposed', inputs: 1, outputs: 1 }),
+      device('ire-sw',       'switch',   1050, 200,{ label: 'Vault Switch',          capacity: 'Isolated VLAN',            risk: 'low', phase: 'Proposed', inputs: 2, outputs: 4 }),
+      device('ire-vault',    'database', 880, 320, { label: 'Immutable Backup Vault', capacity: '500 TB · Object Lock',     risk: 'low', phase: 'Proposed', inputs: 1, outputs: 0 }),
+      device('ire-recovery', 'server',   1060, 320,{ label: 'Clean-room Recovery',    capacity: '8 restore VMs',            risk: 'low', phase: 'Proposed', inputs: 1, outputs: 1 }),
+      device('ire-forensic', 'client',   1240, 320,{ label: 'Forensic Workstation',   capacity: 'Malware analysis',         risk: 'low', phase: 'Proposed', inputs: 1, outputs: 0 }),
 
-      ire('mgmt-jump', 'server', 900, 580, {
-        label: 'Jump Host (OOB)',
-        capacity: 'MFA · PAM',
-        costAnnual: 20000,
-        risk: 'low',
-      }),
-      ire('mgmt-siem', 'server', 1120, 580, {
-        label: 'SIEM Forwarder',
-        capacity: 'Read-only logs',
-        costAnnual: 10000,
-        risk: 'low',
-      }),
+      device('mgmt-jump', 'server', 900,  580, { label: 'Jump Host (OOB)',  capacity: 'MFA · PAM',      risk: 'low', phase: 'Proposed', inputs: 1, outputs: 1 }),
+      device('mgmt-siem', 'server', 1120, 580, { label: 'SIEM Forwarder',   capacity: 'Read-only logs', risk: 'low', phase: 'Proposed', inputs: 1, outputs: 1 }),
     ],
     edges: [
-      { id: 'e1', source: 'prod-db', target: 'prod-sw', sourceHandle: 'out-0', targetHandle: 'in-0' },
-      { id: 'e2', source: 'prod-app', target: 'prod-sw', sourceHandle: 'out-0', targetHandle: 'in-0' },
-      { id: 'e3', source: 'prod-sw', target: 'prod-backup', sourceHandle: 'out-0', targetHandle: 'in-0' },
-      { id: 'e4', source: 'prod-sw', target: 'prod-fw', sourceHandle: 'out-0', targetHandle: 'in-0' },
+      edge('e1', 'prod-db',     'prod-sw',     'network'),
+      edge('e2', 'prod-app',    'prod-sw',     'network'),
+      edge('e3', 'prod-sw',     'prod-backup', 'network'),
+      edge('e4', 'prod-sw',     'prod-fw',     'network'),
 
-      {
-        id: 'e-airgap',
-        source: 'prod-backup',
-        target: 'ire-fw',
-        sourceHandle: 'out-0',
-        targetHandle: 'in-0',
-        label: 'One-way replication',
-        animated: true,
-        style: { strokeDasharray: '6 4', stroke: '#22c55e', strokeWidth: 2 },
-        labelStyle: { fill: '#22c55e', fontWeight: 600 },
-      },
+      edge('e-airgap', 'prod-backup', 'ire-fw', 'replication', { label: 'One-way replication' }),
 
-      { id: 'e5', source: 'ire-fw', target: 'ire-sw', sourceHandle: 'out-0', targetHandle: 'in-0' },
-      { id: 'e6', source: 'ire-sw', target: 'ire-vault', sourceHandle: 'out-0', targetHandle: 'in-0' },
-      { id: 'e7', source: 'ire-sw', target: 'ire-recovery', sourceHandle: 'out-0', targetHandle: 'in-0' },
-      { id: 'e8', source: 'ire-sw', target: 'ire-forensic', sourceHandle: 'out-0', targetHandle: 'in-0' },
+      edge('e5', 'ire-fw', 'ire-sw',       'network'),
+      edge('e6', 'ire-sw', 'ire-vault',    'network'),
+      edge('e7', 'ire-sw', 'ire-recovery', 'network'),
+      edge('e8', 'ire-sw', 'ire-forensic', 'network'),
 
-      {
-        id: 'e9',
-        source: 'mgmt-jump',
-        target: 'ire-sw',
-        sourceHandle: 'out-0',
-        targetHandle: 'in-0',
-        label: 'Admin',
-        style: { stroke: '#94a3b8' },
-      },
-      {
-        id: 'e10',
-        source: 'mgmt-siem',
-        target: 'ire-sw',
-        sourceHandle: 'out-0',
-        targetHandle: 'in-0',
-        label: 'Log export',
-        style: { stroke: '#94a3b8', strokeDasharray: '4 4' },
-      },
+      edge('e9',  'mgmt-jump', 'ire-sw', 'management', { label: 'Admin' }),
+      edge('e10', 'mgmt-siem', 'ire-sw', 'logs',       { label: 'Log export' }),
     ],
   },
 };

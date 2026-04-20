@@ -1,146 +1,186 @@
-const STROKE = '#e2e8f0';
-const FILL = '#273449';
-const ACCENT = '#38bdf8';
+const DARK = '#0f172a';
+const LIGHT = '#f1f5f9';
 
-function Router() {
+function Router({ accent }) {
   return (
-    <svg viewBox="0 0 64 64" width="48" height="48" role="img" aria-label="Router">
-      <rect x="8" y="28" width="48" height="20" rx="4" fill={FILL} stroke={STROKE} strokeWidth="2" />
-      <circle cx="16" cy="38" r="2" fill={ACCENT} />
-      <circle cx="22" cy="38" r="2" fill={ACCENT} />
-      <circle cx="28" cy="38" r="2" fill={ACCENT} />
-      <path d="M20 22 L20 14 M32 22 L32 10 M44 22 L44 14" stroke={STROKE} strokeWidth="2" fill="none" />
-      <polygon points="20,10 17,14 23,14" fill={STROKE} />
-      <polygon points="32,6 29,10 35,10" fill={STROKE} />
-      <polygon points="44,10 41,14 47,14" fill={STROKE} />
+    <svg viewBox="0 0 64 64" width="100%" height="100%" role="img" aria-label="Router">
+      <defs>
+        <linearGradient id="rtr-g" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0" stopColor={accent} stopOpacity="0.9" />
+          <stop offset="1" stopColor={accent} stopOpacity="0.55" />
+        </linearGradient>
+      </defs>
+      <rect x="6" y="30" width="52" height="22" rx="5" fill="url(#rtr-g)" stroke={LIGHT} strokeWidth="2" />
+      <path d="M16 24 V12 M32 24 V6 M48 24 V12" stroke={LIGHT} strokeWidth="2.5" fill="none" strokeLinecap="round" />
+      <polygon points="16,4  11,12 21,12" fill={LIGHT} />
+      <polygon points="48,4  43,12 53,12" fill={LIGHT} />
+      <polygon points="32,62 27,54 37,54" fill={LIGHT} />
+      <circle cx="18" cy="41" r="2.5" fill={LIGHT} />
+      <circle cx="26" cy="41" r="2.5" fill={LIGHT} />
+      <circle cx="34" cy="41" r="2.5" fill={LIGHT} />
+      <circle cx="42" cy="41" r="2.5" fill={LIGHT} />
     </svg>
   );
 }
 
-function Switch() {
+function Switch({ accent }) {
   return (
-    <svg viewBox="0 0 64 64" width="48" height="48" role="img" aria-label="Switch">
-      <rect x="6" y="24" width="52" height="20" rx="3" fill={FILL} stroke={STROKE} strokeWidth="2" />
-      {[12, 20, 28, 36, 44, 52].map((x) => (
-        <rect key={x} x={x - 2} y="32" width="4" height="6" fill={ACCENT} />
+    <svg viewBox="0 0 64 64" width="100%" height="100%" role="img" aria-label="Switch">
+      <rect x="4" y="22" width="56" height="24" rx="4" fill={accent} stroke={LIGHT} strokeWidth="2" opacity="0.85" />
+      <rect x="4" y="22" width="56" height="6" fill={LIGHT} opacity="0.18" />
+      {[9, 17, 25, 33, 41, 49].map((x) => (
+        <rect key={x} x={x} y="33" width="6" height="8" rx="1" fill={LIGHT} />
       ))}
-      <path d="M14 18 L14 14 L50 14 L50 18" stroke={STROKE} strokeWidth="1.5" fill="none" />
-      <polygon points="14,14 11,18 17,18" fill={STROKE} />
-      <polygon points="50,14 47,18 53,18" fill={STROKE} />
+      <path d="M12 16 L12 10 L52 10 L52 16" stroke={LIGHT} strokeWidth="2" fill="none" />
+      <polygon points="12,6 8,12 16,12" fill={LIGHT} />
+      <polygon points="52,6 48,12 56,12" fill={LIGHT} />
+      <polygon points="32,58 28,50 36,50" fill={LIGHT} />
     </svg>
   );
 }
 
-function Firewall() {
+function Firewall({ accent }) {
   return (
-    <svg viewBox="0 0 64 64" width="48" height="48" role="img" aria-label="Firewall">
-      <rect x="10" y="14" width="44" height="36" fill={FILL} stroke={STROKE} strokeWidth="2" />
-      {[
-        [10, 14, 14, 8], [24, 14, 16, 8], [40, 14, 14, 8],
-        [10, 22, 10, 8], [20, 22, 16, 8], [36, 22, 16, 8], [52, 22, 2, 8],
-        [10, 30, 14, 8], [24, 30, 16, 8], [40, 30, 14, 8],
-        [10, 38, 10, 8], [20, 38, 16, 8], [36, 38, 16, 8], [52, 38, 2, 8],
-      ].map(([x, y, w, h], i) => (
-        <rect key={i} x={x} y={y} width={w} height={h} fill="none" stroke={STROKE} strokeWidth="1" />
-      ))}
-      <path d="M32 20 L32 44" stroke={ACCENT} strokeWidth="2.5" />
-      <circle cx="32" cy="32" r="4" fill={ACCENT} />
+    <svg viewBox="0 0 64 64" width="100%" height="100%" role="img" aria-label="Firewall">
+      <path d="M32 6 L54 14 V32 C54 46 44 54 32 58 C20 54 10 46 10 32 V14 Z"
+        fill={accent} stroke={LIGHT} strokeWidth="2" />
+      <path d="M32 6 L54 14 V32 C54 46 44 54 32 58 C20 54 10 46 10 32 V14 Z"
+        fill="none" stroke={LIGHT} strokeWidth="1" opacity="0.35" />
+      <path d="M24 30 L30 36 L42 22" stroke={LIGHT} strokeWidth="4" fill="none" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
 
-function Server() {
+function Server({ accent }) {
   return (
-    <svg viewBox="0 0 64 64" width="48" height="48" role="img" aria-label="Server">
-      {[12, 26, 40].map((y) => (
+    <svg viewBox="0 0 64 64" width="100%" height="100%" role="img" aria-label="Server">
+      {[8, 24, 40].map((y) => (
         <g key={y}>
-          <rect x="12" y={y} width="40" height="10" rx="2" fill={FILL} stroke={STROKE} strokeWidth="2" />
-          <circle cx="18" cy={y + 5} r="1.5" fill={ACCENT} />
-          <circle cx="24" cy={y + 5} r="1.5" fill={STROKE} />
-          <rect x="32" y={y + 3} width="16" height="4" fill={STROKE} opacity="0.25" />
+          <rect x="8" y={y} width="48" height="14" rx="3" fill={accent} stroke={LIGHT} strokeWidth="2" opacity="0.9" />
+          <rect x="8" y={y} width="48" height="4" fill={LIGHT} opacity="0.18" />
+          <circle cx="16" cy={y + 7} r="2" fill={LIGHT} />
+          <circle cx="22" cy={y + 7} r="2" fill={LIGHT} opacity="0.45" />
+          <rect x="32" y={y + 4} width="20" height="6" rx="1" fill={LIGHT} opacity="0.25" />
         </g>
       ))}
     </svg>
   );
 }
 
-function Client() {
+function Client({ accent }) {
   return (
-    <svg viewBox="0 0 64 64" width="48" height="48" role="img" aria-label="Client">
-      <rect x="8" y="12" width="48" height="32" rx="2" fill={FILL} stroke={STROKE} strokeWidth="2" />
-      <rect x="12" y="16" width="40" height="22" fill={ACCENT} opacity="0.25" />
-      <rect x="24" y="46" width="16" height="4" fill={STROKE} />
-      <rect x="18" y="50" width="28" height="3" rx="1" fill={STROKE} />
+    <svg viewBox="0 0 64 64" width="100%" height="100%" role="img" aria-label="Client">
+      <rect x="6" y="10" width="52" height="36" rx="3" fill={DARK} stroke={LIGHT} strokeWidth="2" />
+      <rect x="10" y="14" width="44" height="26" rx="1" fill={accent} opacity="0.85" />
+      <rect x="10" y="14" width="44" height="10" fill={LIGHT} opacity="0.15" />
+      <rect x="24" y="48" width="16" height="3" fill={LIGHT} />
+      <rect x="16" y="51" width="32" height="4" rx="1" fill={LIGHT} />
     </svg>
   );
 }
 
-function Cloud() {
+function Cloud({ accent }) {
   return (
-    <svg viewBox="0 0 64 64" width="48" height="48" role="img" aria-label="Cloud">
+    <svg viewBox="0 0 64 64" width="100%" height="100%" role="img" aria-label="Cloud">
+      <defs>
+        <linearGradient id="cld-g" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0" stopColor={accent} stopOpacity="1" />
+          <stop offset="1" stopColor={accent} stopOpacity="0.55" />
+        </linearGradient>
+      </defs>
       <path
-        d="M18 44 Q8 44 8 34 Q8 24 18 24 Q20 14 32 14 Q44 14 46 26 Q56 26 56 36 Q56 44 46 44 Z"
-        fill={FILL} stroke={STROKE} strokeWidth="2"
+        d="M18 46 Q6 46 6 34 Q6 22 18 22 Q20 10 32 10 Q46 10 48 24 Q58 24 58 36 Q58 46 46 46 Z"
+        fill="url(#cld-g)" stroke={LIGHT} strokeWidth="2"
+      />
+      <path
+        d="M22 34 Q22 30 26 30 Q28 26 32 26 Q38 26 40 32 Q44 32 44 36"
+        stroke={LIGHT} strokeWidth="1.5" fill="none" opacity="0.5"
       />
     </svg>
   );
 }
 
-function AccessPoint() {
+function AccessPoint({ accent }) {
   return (
-    <svg viewBox="0 0 64 64" width="48" height="48" role="img" aria-label="Access Point">
-      <rect x="16" y="36" width="32" height="12" rx="2" fill={FILL} stroke={STROKE} strokeWidth="2" />
-      <circle cx="24" cy="42" r="1.5" fill={ACCENT} />
-      <circle cx="30" cy="42" r="1.5" fill={ACCENT} />
-      <path d="M32 30 Q20 30 14 22" stroke={STROKE} strokeWidth="2" fill="none" />
-      <path d="M32 30 Q44 30 50 22" stroke={STROKE} strokeWidth="2" fill="none" />
-      <path d="M32 28 Q22 26 18 16" stroke={STROKE} strokeWidth="1.5" fill="none" opacity="0.6" />
-      <path d="M32 28 Q42 26 46 16" stroke={STROKE} strokeWidth="1.5" fill="none" opacity="0.6" />
-      <circle cx="32" cy="32" r="2" fill={ACCENT} />
+    <svg viewBox="0 0 64 64" width="100%" height="100%" role="img" aria-label="Access Point">
+      <path d="M32 38 Q14 38 6 22"  stroke={accent} strokeWidth="3" fill="none" strokeLinecap="round" />
+      <path d="M32 38 Q50 38 58 22" stroke={accent} strokeWidth="3" fill="none" strokeLinecap="round" />
+      <path d="M32 34 Q20 30 14 14" stroke={accent} strokeWidth="2" fill="none" opacity="0.65" strokeLinecap="round" />
+      <path d="M32 34 Q44 30 50 14" stroke={accent} strokeWidth="2" fill="none" opacity="0.65" strokeLinecap="round" />
+      <path d="M32 30 Q26 22 24 8"  stroke={accent} strokeWidth="1.5" fill="none" opacity="0.4" strokeLinecap="round" />
+      <path d="M32 30 Q38 22 40 8"  stroke={accent} strokeWidth="1.5" fill="none" opacity="0.4" strokeLinecap="round" />
+      <rect x="14" y="40" width="36" height="14" rx="3" fill={accent} stroke={LIGHT} strokeWidth="2" />
+      <circle cx="22" cy="47" r="2" fill={LIGHT} />
+      <circle cx="30" cy="47" r="2" fill={LIGHT} opacity="0.55" />
+      <circle cx="38" cy="47" r="2" fill={LIGHT} opacity="0.3" />
     </svg>
   );
 }
 
-function Database() {
+function Database({ accent }) {
   return (
-    <svg viewBox="0 0 64 64" width="48" height="48" role="img" aria-label="Database">
-      <ellipse cx="32" cy="16" rx="18" ry="6" fill={FILL} stroke={STROKE} strokeWidth="2" />
-      <path d="M14 16 L14 32 Q14 38 32 38 Q50 38 50 32 L50 16" fill={FILL} stroke={STROKE} strokeWidth="2" />
-      <path d="M14 32 L14 48 Q14 54 32 54 Q50 54 50 48 L50 32" fill={FILL} stroke={STROKE} strokeWidth="2" />
-      <ellipse cx="32" cy="32" rx="18" ry="6" fill="none" stroke={STROKE} strokeWidth="1.5" opacity="0.6" />
+    <svg viewBox="0 0 64 64" width="100%" height="100%" role="img" aria-label="Database">
+      <defs>
+        <linearGradient id="db-g" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0" stopColor={accent} stopOpacity="1" />
+          <stop offset="1" stopColor={accent} stopOpacity="0.5" />
+        </linearGradient>
+      </defs>
+      <ellipse cx="32" cy="12" rx="22" ry="7" fill="url(#db-g)" stroke={LIGHT} strokeWidth="2" />
+      <path d="M10 12 V28 Q10 35 32 35 Q54 35 54 28 V12" fill="url(#db-g)" stroke={LIGHT} strokeWidth="2" />
+      <path d="M10 28 V44 Q10 51 32 51 Q54 51 54 44 V28" fill="url(#db-g)" stroke={LIGHT} strokeWidth="2" />
+      <path d="M10 44 V56 Q10 62 32 62 Q54 62 54 56 V44" fill="url(#db-g)" stroke={LIGHT} strokeWidth="2" />
+      <ellipse cx="32" cy="28" rx="22" ry="7" fill="none" stroke={LIGHT} strokeWidth="1" opacity="0.5" />
+      <ellipse cx="32" cy="44" rx="22" ry="7" fill="none" stroke={LIGHT} strokeWidth="1" opacity="0.5" />
     </svg>
   );
 }
 
-function LoadBalancer() {
+function LoadBalancer({ accent }) {
   return (
-    <svg viewBox="0 0 64 64" width="48" height="48" role="img" aria-label="Load Balancer">
-      <polygon points="32,8 58,32 32,56 6,32" fill={FILL} stroke={STROKE} strokeWidth="2" />
-      <path d="M18 32 L46 32" stroke={ACCENT} strokeWidth="2" />
-      <path d="M32 20 L46 32 L32 44" stroke={ACCENT} strokeWidth="2" fill="none" />
-      <circle cx="18" cy="32" r="3" fill={ACCENT} />
+    <svg viewBox="0 0 64 64" width="100%" height="100%" role="img" aria-label="Load Balancer">
+      <polygon points="32,4 60,32 32,60 4,32" fill={accent} stroke={LIGHT} strokeWidth="2" />
+      <path d="M14 32 H50" stroke={LIGHT} strokeWidth="3" strokeLinecap="round" />
+      <path d="M22 22 L14 32 L22 42" stroke={LIGHT} strokeWidth="3" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M42 22 L50 32 L42 42" stroke={LIGHT} strokeWidth="3" fill="none" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
 
-const ICONS = {
-  router: Router,
-  switch: Switch,
-  firewall: Firewall,
-  server: Server,
-  client: Client,
-  cloud: Cloud,
-  ap: AccessPoint,
-  database: Database,
-  'load-balancer': LoadBalancer,
+function Generic({ accent }) {
+  return (
+    <svg viewBox="0 0 64 64" width="100%" height="100%" role="img" aria-label="Device">
+      <rect x="8" y="8" width="48" height="48" rx="8" fill={accent} stroke={LIGHT} strokeWidth="2" />
+      <circle cx="32" cy="32" r="8" fill={LIGHT} opacity="0.85" />
+    </svg>
+  );
+}
+
+export const ICON_META = {
+  router:         { accent: '#38bdf8', Component: Router },
+  switch:         { accent: '#14b8a6', Component: Switch },
+  firewall:       { accent: '#ef4444', Component: Firewall },
+  server:         { accent: '#a78bfa', Component: Server },
+  client:         { accent: '#64748b', Component: Client },
+  cloud:          { accent: '#0ea5e9', Component: Cloud },
+  ap:             { accent: '#22d3ee', Component: AccessPoint },
+  database:       { accent: '#f59e0b', Component: Database },
+  'load-balancer':{ accent: '#10b981', Component: LoadBalancer },
+  generic:        { accent: '#94a3b8', Component: Generic },
 };
 
-export default function DeviceIcon({ type, size = 48 }) {
-  const Cmp = ICONS[type];
-  if (!Cmp) return null;
+export const ICON_KEYS = Object.keys(ICON_META);
+
+export function iconAccent(iconKey) {
+  return (ICON_META[iconKey] ?? ICON_META.generic).accent;
+}
+
+export default function DeviceIcon({ iconKey, size = 64 }) {
+  const meta = ICON_META[iconKey] ?? ICON_META.generic;
+  const Cmp = meta.Component;
   return (
     <div style={{ width: size, height: size, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <Cmp />
+      <Cmp accent={meta.accent} />
     </div>
   );
 }
