@@ -98,7 +98,7 @@ html, body, #root {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 10px;
+  padding: 6px 8px;
   margin-bottom: 6px;
   background: var(--panel-2);
   border: 1px solid var(--border);
@@ -109,7 +109,7 @@ html, body, #root {
 }
 .palette-item:hover { border-color: var(--accent); }
 .palette-item:active { cursor: grabbing; }
-.palette-item .icon { font-size: 18px; }
+.palette-item svg { flex-shrink: 0; }
 
 .canvas {
   grid-area: canvas;
@@ -170,19 +170,20 @@ html, body, #root {
 .design-list .meta { font-size: 11px; color: var(--muted); }
 
 .net-node {
+  position: relative;
   background: var(--panel-2);
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 8px 12px;
-  min-width: 120px;
+  border-radius: 10px;
+  padding: 10px 18px;
+  min-width: 140px;
   color: var(--text);
   font-size: 13px;
   text-align: center;
   box-shadow: 0 2px 6px rgba(0,0,0,0.25);
 }
-.net-node .icon { font-size: 20px; display: block; margin-bottom: 2px; }
-.net-node .label { font-weight: 600; }
+.net-node .label { font-weight: 600; margin-top: 4px; }
 .net-node .sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.net-node .ports { font-size: 10px; letter-spacing: 0.04em; opacity: 0.75; }
 
 .react-flow__node.selected .net-node {
   border-color: var(--accent);

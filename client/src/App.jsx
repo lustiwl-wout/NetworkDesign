@@ -10,6 +10,7 @@ import ReactFlow, {
   useReactFlow,
 } from 'reactflow';
 import NetworkNode from './NetworkNode.jsx';
+import DeviceIcon from './DeviceIcons.jsx';
 import { NODE_CATALOG, CATALOG_BY_TYPE } from './nodeTypes.js';
 import { api } from './api.js';
 
@@ -62,7 +63,12 @@ function Editor() {
         id: nextId(),
         type,
         position,
-        data: { label: meta.label, ip: '' },
+        data: {
+          label: meta.label,
+          ip: '',
+          inputs: meta.defaultInputs,
+          outputs: meta.defaultOutputs,
+        },
       };
       setNodes((nds) => nds.concat(newNode));
     },
@@ -128,6 +134,26 @@ function Editor() {
     setSelectedNode((n) => ({ ...n, data: { ...n.data, ...patch } }));
   };
 
+  const setPortCount = (kind, count) => {
+    if (!selectedNode) return;
+    const n = Math.max(0, Math.min(64, Number(count) || 0));
+    const nodeId = selectedNode.id;
+    updateSelectedNode({ [kind]: n });
+    setEdges((eds) =>
+      eds.filter((e) => {
+        if (kind === 'outputs' && e.source === nodeId && e.sourceHandle) {
+          const idx = Number(e.sourceHandle.replace('out-', ''));
+          return idx < n;
+        }
+        if (kind === 'inputs' && e.target === nodeId && e.targetHandle) {
+          const idx = Number(e.targetHandle.replace('in-', ''));
+          return idx < n;
+        }
+        return true;
+      })
+    );
+  };
+
   const updateSelectedEdge = (patch) => {
     if (!selectedEdge) return;
     setEdges((eds) =>
@@ -173,8 +199,9 @@ function Editor() {
             className="palette-item"
             draggable
             onDragStart={(e) => onPaletteDragStart(e, n.type)}
+            title={`${n.defaultInputs} in · ${n.defaultOutputs} out`}
           >
-            <span className="icon">{n.icon}</span>
+            <DeviceIcon type={n.type} size={28} />
             <span>{n.label}</span>
           </div>
         ))}
@@ -233,6 +260,28 @@ function Editor() {
               onChange={(e) => updateSelectedNode({ ip: e.target.value })}
               placeholder="10.0.0.1"
             />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <div>
+                <label>Input ports</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="64"
+                  value={selectedNode.data?.inputs ?? 0}
+                  onChange={(e) => setPortCount('inputs', e.target.value)}
+                />
+              </div>
+              <div>
+                <label>Output ports</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="64"
+                  value={selectedNode.data?.outputs ?? 0}
+                  onChange={(e) => setPortCount('outputs', e.target.value)}
+                />
+              </div>
+            </div>
             <button className="btn danger" onClick={deleteSelected}>Delete node</button>
           </>
         )}
