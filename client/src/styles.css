@@ -389,9 +389,13 @@ html, body, #root {
 }
 @keyframes dashdraw { to { stroke-dashoffset: -10; } }
 
-/* Zones sit behind edges so lines visually float over zone backgrounds.
-   Combined with node.zIndex = -1 on the data side. */
+/* Stack order: zones (back) → devices → edges (top). This guarantees no
+   edge ever appears "behind" a device icon, regardless of routing. */
 .react-flow__node.react-flow__node-zone { z-index: -1 !important; }
+.react-flow__edges  { z-index: 3 !important; }
+.react-flow__node   { z-index: 2; }
+/* Keep handles clickable even though edges sit on top */
+.react-flow__handle { z-index: 4 !important; }
 
 .toast {
   position: absolute;
