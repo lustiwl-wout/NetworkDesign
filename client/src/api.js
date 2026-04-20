@@ -22,4 +22,7 @@ export const api = {
   create: (body)        => request('/designs', { method: 'POST', body: JSON.stringify(body) }),
   update: (id, body)    => request(`/designs/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   remove: (id)          => request(`/designs/${id}`, { method: 'DELETE' }),
+
+  versions:      (id)       => request(`/designs/${id}/versions`),
+  restoreVersion:(id, vid)  => request(`/designs/${id}/versions/${vid}/restore`, { method: 'POST' }),
 };

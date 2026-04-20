@@ -29,13 +29,27 @@ CREATE TABLE IF NOT EXISTS designs (
   name        TEXT NOT NULL,
   description TEXT DEFAULT '',
   graph       JSONB NOT NULL DEFAULT '{"nodes":[],"edges":[]}'::jsonb,
+  narrative   JSONB NOT NULL DEFAULT '{}'::jsonb,
   owner_id    INTEGER REFERENCES users(id) ON DELETE SET NULL,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Add owner_id on older installs that created designs before users existed
-ALTER TABLE designs ADD COLUMN IF NOT EXISTS owner_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
+-- Columns added on older installs
+ALTER TABLE designs ADD COLUMN IF NOT EXISTS owner_id  INTEGER REFERENCES users(id) ON DELETE SET NULL;
+ALTER TABLE designs ADD COLUMN IF NOT EXISTS narrative JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+CREATE TABLE IF NOT EXISTS design_versions (
+  id          SERIAL PRIMARY KEY,
+  design_id   INTEGER NOT NULL REFERENCES designs(id) ON DELETE CASCADE,
+  name        TEXT NOT NULL,
+  description TEXT DEFAULT '',
+  graph       JSONB NOT NULL,
+  narrative   JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_by  INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS design_versions_design_idx ON design_versions (design_id, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS device_types (
   id               SERIAL PRIMARY KEY,

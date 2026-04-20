@@ -68,6 +68,12 @@ function Editor({ me }) {
   const [toast, setToast] = useState(null);
   const [templateOpen, setTemplateOpen] = useState(false);
   const [present, setPresent] = useState(false);
+  const [phaseFilter, setPhaseFilter] = useState(null); // null = show all
+  const [narrative, setNarrative] = useState({});
+  const [caseOpen, setCaseOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [versions, setVersions] = useState([]);
+  const [allDesigns, setAllDesigns] = useState([]);
   const wrapperRef = useRef(null);
   const { screenToFlowPosition } = useReactFlow();
 
@@ -85,6 +91,13 @@ function Editor({ me }) {
   }, []);
 
   useEffect(() => { refreshCatalogs(); }, [refreshCatalogs]);
+
+  // Designs list is used by the boundary-device inspector to pick a linked target.
+  useEffect(() => {
+    (async () => {
+      try { setAllDesigns(await api.list()); } catch {}
+    })();
+  }, [currentId]);
 
   // Escape exits presentation mode
   useEffect(() => {
@@ -106,6 +119,7 @@ function Editor({ me }) {
         setName(d.name);
         setNodes(d.graph?.nodes ?? []);
         setEdges(styleEdges(d.graph?.edges ?? []));
+        setNarrative(d.narrative ?? {});
       } catch (e) {
         console.error('Failed to auto-load design:', e);
       }
@@ -242,6 +256,7 @@ function Editor({ me }) {
     setName('Untitled design');
     setNodes([]);
     setEdges([]);
+    setNarrative({});
     setSelectedNode(null);
     setSelectedEdge(null);
   };
@@ -252,6 +267,7 @@ function Editor({ me }) {
     setName(tpl.name);
     setNodes(g.nodes);
     setEdges(styleEdges(g.edges));
+    setNarrative({ problem: tpl.description ?? '' });
     setSelectedNode(null);
     setSelectedEdge(null);
     setTemplateOpen(false);
@@ -265,6 +281,7 @@ function Editor({ me }) {
       setName(d.name);
       setNodes(d.graph?.nodes ?? []);
       setEdges(styleEdges(d.graph?.edges ?? []));
+      setNarrative(d.narrative ?? {});
       flash(`Loaded "${d.name}"`);
     } catch (e) { flash(`Load failed: ${e.message}`); }
   };
@@ -273,15 +290,34 @@ function Editor({ me }) {
     const graph = { nodes, edges };
     try {
       if (currentId) {
-        const d = await api.update(currentId, { name, graph });
+        const d = await api.update(currentId, { name, graph, narrative });
         flash(`Saved "${d.name}"`);
       } else {
-        const d = await api.create({ name, graph });
+        const d = await api.create({ name, graph, narrative });
         setCurrentId(d.id);
         flash(`Created "${d.name}"`);
       }
-      refreshList();
     } catch (e) { flash(`Save failed: ${e.message}`); }
+  };
+
+  const loadVersions = useCallback(async () => {
+    if (!currentId) { setVersions([]); return; }
+    try { setVersions(await api.versions(currentId)); }
+    catch (e) { flash(`History: ${e.message}`); }
+  }, [currentId]);
+
+  const restoreVersion = async (vid) => {
+    if (!currentId) return;
+    if (!confirm('Restore this version? Current unsaved changes will be lost.')) return;
+    try {
+      const d = await api.restoreVersion(currentId, vid);
+      setName(d.name);
+      setNodes(d.graph?.nodes ?? []);
+      setEdges(styleEdges(d.graph?.edges ?? []));
+      setNarrative(d.narrative ?? {});
+      setHistoryOpen(false);
+      flash('Restored');
+    } catch (e) { flash(`Restore failed: ${e.message}`); }
   };
 
   const deleteDesign = async () => {
@@ -332,6 +368,35 @@ function Editor({ me }) {
       setSelectedEdge(null);
     }
   };
+
+  // Build the sorted set of phase values present in the design
+  const phaseOptions = useMemo(() => {
+    const set = new Set();
+    for (const n of nodes) if (n.type === 'device' && n.data?.phase) set.add(n.data.phase);
+    return [...set].sort();
+  }, [nodes]);
+
+  // Apply phase filter: dim devices whose phase doesn't match; zones /
+  // annotations / boundary pass-through unchanged. Edges connected to
+  // a dimmed device get dimmed too so the story stays coherent.
+  const { phasedNodes, phasedEdges } = useMemo(() => {
+    if (!phaseFilter) return { phasedNodes: nodes, phasedEdges: edges };
+    const dimOpacity = 0.18;
+    const dimmedIds = new Set();
+    const pnodes = nodes.map((n) => {
+      if (n.type !== 'device') return n;
+      const matches = n.data?.phase === phaseFilter || !n.data?.phase;
+      if (matches) return n;
+      dimmedIds.add(n.id);
+      return { ...n, style: { ...(n.style ?? {}), opacity: dimOpacity } };
+    });
+    const pedges = edges.map((e) => {
+      const dim = dimmedIds.has(e.source) || dimmedIds.has(e.target);
+      if (!dim) return e;
+      return { ...e, style: { ...(e.style ?? {}), opacity: dimOpacity } };
+    });
+    return { phasedNodes: pnodes, phasedEdges: pedges };
+  }, [nodes, edges, phaseFilter]);
 
   const summary = useMemo(() => {
     const riskCounts = { low: 0, medium: 0, high: 0 };
@@ -386,8 +451,27 @@ function Editor({ me }) {
             </div>
           )}
         </div>
+        {phaseOptions.length > 0 && (
+          <select
+            className="phase-filter"
+            value={phaseFilter ?? ''}
+            onChange={(e) => setPhaseFilter(e.target.value || null)}
+            title="Filter view by phase"
+          >
+            <option value="">All phases</option>
+            {phaseOptions.map((p) => <option key={p} value={p}>{p}</option>)}
+          </select>
+        )}
         <button className="btn secondary" onClick={newDesign}>New</button>
         <a className="btn secondary" href="/designs">Designs</a>
+        <button className="btn secondary" onClick={() => setCaseOpen(true)} title="Business case narrative">
+          Case
+        </button>
+        {currentId && (
+          <button className="btn secondary" onClick={() => { setHistoryOpen(true); loadVersions(); }} title="Version history">
+            History
+          </button>
+        )}
         <button className="btn secondary" onClick={exportPng}>Export PNG</button>
         <button className="btn secondary" onClick={() => setPresent(true)} title="Enter presentation mode (Esc to exit)">
           ▶ Present
@@ -456,8 +540,8 @@ function Editor({ me }) {
 
       <div className="canvas" ref={wrapperRef} onDrop={onDrop} onDragOver={onDragOver}>
         <ReactFlow
-          nodes={nodes}
-          edges={edges}
+          nodes={phasedNodes}
+          edges={phasedEdges}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
@@ -498,6 +582,8 @@ function Editor({ me }) {
             {selectedNode && selectedNode.type === 'device' && (
               <NodeInspector
                 node={selectedNode}
+                allDesigns={allDesigns}
+                currentId={currentId}
                 onChange={updateSelectedNode}
                 onDelete={deleteSelected}
               />
@@ -515,8 +601,102 @@ function Editor({ me }) {
             )}
           </InspectorPopup>
         )}
+        {caseOpen && (
+          <CasePanel
+            narrative={narrative}
+            onChange={setNarrative}
+            onClose={() => setCaseOpen(false)}
+          />
+        )}
+        {historyOpen && (
+          <HistoryPanel
+            versions={versions}
+            onRestore={restoreVersion}
+            onClose={() => setHistoryOpen(false)}
+          />
+        )}
         {toast && <div className="toast">{toast}</div>}
       </div>
+    </div>
+  );
+}
+
+function CasePanel({ narrative, onChange, onClose }) {
+  const set = (patch) => onChange({ ...narrative, ...patch });
+  return (
+    <div className="side-panel" onMouseDown={(e) => e.stopPropagation()}>
+      <header>
+        <h2>Business case</h2>
+        <button className="inspector-close" onClick={onClose}>×</button>
+      </header>
+      <p className="hint">
+        A short narrative to accompany the diagram. Saved with the design and
+        shown on the Designs page. Leave blank what you don't need.
+      </p>
+      <label>Problem / current state</label>
+      <textarea
+        rows="4"
+        value={narrative.problem ?? ''}
+        onChange={(e) => set({ problem: e.target.value })}
+        placeholder="What's broken today, or why act now?"
+      />
+      <label>Options considered</label>
+      <textarea
+        rows="3"
+        value={narrative.options ?? ''}
+        onChange={(e) => set({ options: e.target.value })}
+        placeholder="Key alternatives, with one-line pros/cons."
+      />
+      <label>Recommendation</label>
+      <textarea
+        rows="4"
+        value={narrative.recommendation ?? ''}
+        onChange={(e) => set({ recommendation: e.target.value })}
+        placeholder="What we're proposing and why."
+      />
+      <label>Risks &amp; mitigations</label>
+      <textarea
+        rows="3"
+        value={narrative.risks ?? ''}
+        onChange={(e) => set({ risks: e.target.value })}
+        placeholder="What could go wrong — and how we'd handle it."
+      />
+      <label>Notes</label>
+      <textarea
+        rows="3"
+        value={narrative.notes ?? ''}
+        onChange={(e) => set({ notes: e.target.value })}
+      />
+      <p className="hint small">Changes are stored next time you press <b>Save</b>.</p>
+    </div>
+  );
+}
+
+function HistoryPanel({ versions, onRestore, onClose }) {
+  return (
+    <div className="side-panel" onMouseDown={(e) => e.stopPropagation()}>
+      <header>
+        <h2>Version history</h2>
+        <button className="inspector-close" onClick={onClose}>×</button>
+      </header>
+      {versions.length === 0 && <p className="hint">No snapshots yet. Save the design to start a history.</p>}
+      <ul className="version-list">
+        {versions.map((v) => (
+          <li key={v.id}>
+            <div>
+              <strong>{v.name}</strong>
+              <div className="meta">
+                {new Date(v.created_at).toLocaleString(undefined, {
+                  dateStyle: 'medium', timeStyle: 'short',
+                })}
+                {v.created_by_email ? ` · ${v.created_by_email}` : ''}
+              </div>
+            </div>
+            <button className="btn secondary small" onClick={() => onRestore(v.id)}>Restore</button>
+          </li>
+        ))}
+      </ul>
+      <p className="hint small">A new snapshot is captured on every Save. Oldest are pruned past 50.</p>
     </div>
   );
 }
@@ -552,8 +732,10 @@ function SummaryPill({ summary }) {
   );
 }
 
-function NodeInspector({ node, onChange, onDelete }) {
+function NodeInspector({ node, allDesigns = [], currentId, onChange, onDelete }) {
   const d = node.data ?? {};
+  const isBoundary = d.iconKey === 'boundary-input' || d.iconKey === 'boundary-output';
+  const linkable = allDesigns.filter((x) => x.id !== currentId);
   return (
     <>
       <h2>Device</h2>
@@ -586,6 +768,30 @@ function NodeInspector({ node, onChange, onDelete }) {
           />
         </div>
       </div>
+
+      {isBoundary && (
+        <>
+          <label>Linked design</label>
+          <select
+            value={d.linkedDesignId ?? ''}
+            onChange={(e) => onChange({ linkedDesignId: e.target.value ? Number(e.target.value) : null })}
+          >
+            <option value="">— None —</option>
+            {linkable.map((des) => (
+              <option key={des.id} value={des.id}>{des.name}</option>
+            ))}
+          </select>
+          {d.linkedDesignId && (
+            <a className="btn secondary" href={`/?design=${d.linkedDesignId}`}>
+              Open linked design →
+            </a>
+          )}
+          <p className="hint small">
+            Lets readers jump from this boundary to the other side of the
+            connection (e.g. Shop → HQ).
+          </p>
+        </>
+      )}
 
       <button className="btn danger" onClick={onDelete}>Delete device</button>
     </>
