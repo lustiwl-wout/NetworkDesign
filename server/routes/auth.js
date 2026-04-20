@@ -26,35 +26,9 @@ function publicUser(r) {
   };
 }
 
-authRouter.post('/register', async (req, res, next) => {
-  try {
-    const { email, password, displayName } = req.body ?? {};
-    if (!email || !password) return res.status(400).json({ error: 'email and password required' });
-    if (password.length < 8) return res.status(400).json({ error: 'password must be at least 8 characters' });
-
-    // First user becomes admin; otherwise default role is 'user'
-    const { rows: [{ n }] } = await pool.query('SELECT COUNT(*)::int AS n FROM users');
-    const role = n === 0 ? 'admin' : 'user';
-
-    const hash = await bcrypt.hash(password, 10);
-    let user;
-    try {
-      const { rows } = await pool.query(
-        `INSERT INTO users (email, password_hash, display_name, role)
-         VALUES ($1, $2, $3, $4) RETURNING *`,
-        [email.toLowerCase(), hash, displayName ?? null, role]
-      );
-      user = rows[0];
-    } catch (err) {
-      if (err.code === '23505') return res.status(409).json({ error: 'email already registered' });
-      throw err;
-    }
-
-    const sid = await createSession(user.id, { mfaVerified: false });
-    res.cookie(COOKIE, sid, cookieOptions());
-    res.status(201).json({ user: publicUser(user) });
-  } catch (err) { next(err); }
-});
+// Self-registration is disabled by design — accounts are created by an
+// administrator via /api/admin/users. The very first admin is seeded on boot
+// via INITIAL_ADMIN_EMAIL / INITIAL_ADMIN_PASSWORD.
 
 authRouter.post('/login', async (req, res, next) => {
   try {

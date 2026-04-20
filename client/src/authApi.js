@@ -18,7 +18,6 @@ async function req(path, options = {}) {
 }
 
 export const authApi = {
-  register: (body)   => req('/register', { method: 'POST', body: JSON.stringify(body) }),
   login:    (body)   => req('/login',    { method: 'POST', body: JSON.stringify(body) }),
   logout:   ()       => req('/logout',   { method: 'POST' }),
   me:       ()       => req('/me'),

@@ -11,7 +11,8 @@ import ReactFlow, {
 } from 'reactflow';
 import NetworkNode from './NetworkNode.jsx';
 import ZoneNode from './ZoneNode.jsx';
-import DeviceIcon from './DeviceIcons.jsx';
+import AnnotationNode from './AnnotationNode.jsx';
+import DeviceIcon, { ICON_META } from './DeviceIcons.jsx';
 import AdminPortal from './AdminPortal.jsx';
 import DesignsPage from './DesignsPage.jsx';
 import LoginPage from './LoginPage.jsx';
@@ -23,7 +24,7 @@ import { authApi } from './authApi.js';
 import { EDGE_KINDS, EDGE_KINDS_BY_KEY, applyKind } from './edgePresets.js';
 import { exportCanvasPng } from './exportImage.js';
 
-const nodeTypes = { device: NetworkNode, zone: ZoneNode };
+const nodeTypes = { device: NetworkNode, zone: ZoneNode, annotation: AnnotationNode };
 
 let tmpId = 1;
 const nextId = () => `n_${Date.now().toString(36)}_${tmpId++}`;
@@ -65,6 +66,7 @@ function Editor({ me }) {
   const [toast, setToast] = useState(null);
   const [templateOpen, setTemplateOpen] = useState(false);
   const [mode, setMode] = useState('management'); // 'management' | 'engineer'
+  const [present, setPresent] = useState(false);
   const wrapperRef = useRef(null);
   const { screenToFlowPosition } = useReactFlow();
 
@@ -77,6 +79,14 @@ function Editor({ me }) {
   }, []);
 
   useEffect(() => { refreshCatalogs(); }, [refreshCatalogs]);
+
+  // Escape exits presentation mode
+  useEffect(() => {
+    if (!present) return;
+    const onKey = (e) => { if (e.key === 'Escape') setPresent(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [present]);
 
   // Deep-link: /?design=<id> auto-loads that design once catalogs are ready
   useEffect(() => {
@@ -169,6 +179,21 @@ function Editor({ me }) {
           },
           ...nds,
         ]);
+      } else if (kind === 'annotation') {
+        setNodes((nds) => nds.concat({
+          id: nextId(),
+          type: 'annotation',
+          position,
+          style: { width: 220, height: 80 },
+          data: {
+            text: 'Click to edit this note',
+            title: '',
+            color: value === 'warning' ? '#ef4444'
+                 : value === 'success' ? '#22c55e'
+                 : '#facc15',
+            variant: value === 'note' ? 'note' : 'callout',
+          },
+        }));
       }
     },
     [screenToFlowPosition, setNodes, deviceByKey, zoneByKey, nodes]
@@ -239,7 +264,7 @@ function Editor({ me }) {
 
   const exportPng = async () => {
     try {
-      await exportCanvasPng({ nodes, title: name, subtitle: summarySubtitle() });
+      await exportCanvasPng({ nodes, edges, deviceTypes, title: name, subtitle: summarySubtitle() });
       flash('Exported PNG');
     } catch (e) { flash(`Export failed: ${e.message}`); }
   };
@@ -317,7 +342,7 @@ function Editor({ me }) {
   };
 
   return (
-    <div className="app">
+    <div className={`app${present ? ' presenting' : ''}`}>
       <div className="topbar">
         <h1>Network Design</h1>
         <input
@@ -355,6 +380,9 @@ function Editor({ me }) {
         <button className="btn secondary" onClick={newDesign}>New</button>
         <a className="btn secondary" href="/designs">Designs</a>
         <button className="btn secondary" onClick={exportPng}>Export PNG</button>
+        <button className="btn secondary" onClick={() => setPresent(true)} title="Enter presentation mode (Esc to exit)">
+          ▶ Present
+        </button>
         <button className="btn" onClick={saveDesign}>Save</button>
         {currentId && <button className="btn danger" onClick={deleteDesign}>Delete</button>}
         {me?.role === 'admin' && (
@@ -397,6 +425,24 @@ function Editor({ me }) {
           </div>
         ))}
 
+        <h2>Annotations</h2>
+        {[
+          { key: 'callout', label: 'Callout', color: '#facc15' },
+          { key: 'note',    label: 'Note',    color: '#38bdf8' },
+          { key: 'warning', label: 'Warning', color: '#ef4444' },
+          { key: 'success', label: 'Success', color: '#22c55e' },
+        ].map((a) => (
+          <div
+            key={a.key}
+            className="palette-item"
+            draggable
+            onDragStart={(e) => onPaletteDragStart(e, 'annotation', a.key)}
+            title="Drag onto the canvas, then click to edit"
+          >
+            <span className="zone-swatch" style={{ background: a.color }} />
+            <span>{a.label}</span>
+          </div>
+        ))}
       </aside>
 
       <div className={`canvas mode-${mode}`} ref={wrapperRef} onDrop={onDrop} onDragOver={onDragOver}>
@@ -419,6 +465,11 @@ function Editor({ me }) {
           <MiniMap pannable zoomable maskColor="rgba(15,23,42,0.6)" />
         </ReactFlow>
         <SummaryPill summary={summary} />
+        {present && (
+          <button className="present-exit" onClick={() => setPresent(false)} title="Exit presentation (Esc)">
+            ✕ Exit
+          </button>
+        )}
         {(selectedNode || selectedEdge) && (
           <InspectorPopup onClose={() => { setSelectedNode(null); setSelectedEdge(null); }}>
             {selectedNode && selectedNode.type === 'zone' && (
@@ -432,6 +483,9 @@ function Editor({ me }) {
                 onPortChange={setPortCount}
                 onDelete={deleteSelected}
               />
+            )}
+            {selectedNode && selectedNode.type === 'annotation' && (
+              <AnnotationInspector node={selectedNode} onChange={updateSelectedNode} onDelete={deleteSelected} />
             )}
             {selectedEdge && (
               <EdgeInspector
@@ -603,6 +657,49 @@ function ZoneInspector({ node, onChange, onDelete }) {
   );
 }
 
+function AnnotationInspector({ node, onChange, onDelete }) {
+  const d = node.data ?? {};
+  return (
+    <>
+      <h2>Annotation</h2>
+      <label>Title (optional)</label>
+      <input
+        value={d.title ?? ''}
+        onChange={(e) => onChange({ title: e.target.value })}
+        placeholder="e.g. Bottleneck"
+      />
+      <label>Text</label>
+      <textarea
+        rows="4"
+        value={d.text ?? ''}
+        onChange={(e) => onChange({ text: e.target.value })}
+        placeholder="Free-form note, callout, or context…"
+      />
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+        <div>
+          <label>Style</label>
+          <select
+            value={d.variant ?? 'callout'}
+            onChange={(e) => onChange({ variant: e.target.value })}
+          >
+            <option value="callout">Callout (dashed)</option>
+            <option value="note">Note (solid)</option>
+          </select>
+        </div>
+        <div>
+          <label>Color</label>
+          <input
+            type="color"
+            value={d.color ?? '#facc15'}
+            onChange={(e) => onChange({ color: e.target.value })}
+          />
+        </div>
+      </div>
+      <button className="btn danger" onClick={onDelete}>Delete annotation</button>
+    </>
+  );
+}
+
 function EdgeInspector({ edge, mode, onChange, onKindChange, onDelete }) {
   const kindKey = edge.data?.kind ?? 'network';
   const kind = EDGE_KINDS_BY_KEY[kindKey] ?? EDGE_KINDS_BY_KEY.network;
@@ -695,7 +792,6 @@ function Root() {
   if (!me || !me.user || me.mfaRequired) {
     return (
       <LoginPage
-        mode={path === '/register' ? 'register' : 'login'}
         initialMfa={!!me?.mfaRequired}
         onAuthed={refreshMe}
       />
