@@ -26,13 +26,29 @@ export default function SmartEdge(props) {
   const sourceNode = nodeInternals.get(source);
   const targetNode = nodeInternals.get(target);
 
-  // Obstacles: every measured node EXCEPT the edge's own endpoints.
-  // Zones ARE obstacles when they're not an endpoint — lines no longer
-  // pass through zone backgrounds. Annotations are transparent.
+  // Obstacles: every measured node EXCEPT
+  //  (a) the edge's own endpoints,
+  //  (b) any ancestor zone of either endpoint.
+  // Rule (b) is what lets an edge from an outside network device cross
+  // the border of the zone that contains the target and land on a
+  // specific device inside: the containing zone is not an obstacle for
+  // edges whose endpoint lives in it. Every OTHER zone stays an
+  // obstacle so lines don't leak through unrelated zone backgrounds.
   const obstacles = useMemo(() => {
+    const excluded = new Set([source, target]);
+    const walkAncestors = (id) => {
+      let cur = nodeInternals.get(id);
+      while (cur && cur.parentNode) {
+        excluded.add(cur.parentNode);
+        cur = nodeInternals.get(cur.parentNode);
+      }
+    };
+    walkAncestors(source);
+    walkAncestors(target);
+
     const list = [];
     for (const n of nodeInternals.values()) {
-      if (n.id === source || n.id === target) continue;
+      if (excluded.has(n.id)) continue;
       if (n.type === 'annotation') continue;
       if (!n.width || !n.height) continue;
       const p = n.positionAbsolute ?? n.position;

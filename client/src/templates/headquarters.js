@@ -81,6 +81,9 @@ export default {
       edge('e8', 'hq-fw',       'hq-internet', 'network'),
       edge('e9', 'hq-internet', 'z-cloud',     'network', { label: 'SaaS / IaaS' }),
       edge('e10','z-dc',        'z-cloud',     'replication', { label: 'Backup replication' }),
+      // Direct edge into a specific VM inside the zone — shows the
+      // edges-into-zones capability.
+      edge('e11','hq-core',     'hq-erp',      'management',  { label: 'Admin' }),
     ],
   },
 };
