@@ -624,7 +624,7 @@ function Editor({ me }) {
             <span>
               {me
                 ? 'Your account is view-only. Use Export PNG to keep your work.'
-                : 'You can build and explore templates, but designs aren\'t saved. '}
+                : 'You can build a design and export it as PNG, but changes aren\'t saved. '}
               {!me && <a href="/login">Sign in</a>}
               {!me && ' to save.'}
             </span>
