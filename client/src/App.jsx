@@ -385,7 +385,7 @@ function Editor({ me }) {
 
   const exportPng = async () => {
     try {
-      await exportCanvasPng({ nodes, edges, deviceTypes, title: name, subtitle: summarySubtitle() });
+      await exportCanvasPng({ nodes, edges, title: name, subtitle: summarySubtitle() });
       flash('Exported PNG');
     } catch (e) { flash(`Export failed: ${e.message}`); }
   };
