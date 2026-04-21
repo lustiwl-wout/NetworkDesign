@@ -385,7 +385,7 @@ function Editor({ me }) {
 
   const exportPng = async () => {
     try {
-      await exportCanvasPng({ nodes, edges, title: name, subtitle: summarySubtitle() });
+      await exportCanvasPng({ nodes, edges, title: name });
       flash('Exported PNG');
     } catch (e) { flash(`Export failed: ${e.message}`); }
   };
@@ -469,13 +469,6 @@ function Editor({ me }) {
     }
     return { riskCounts, phases: [...phases.entries()], deviceCount, inputCount, outputCount };
   }, [nodes]);
-
-  const summarySubtitle = () => {
-    const parts = [`${summary.deviceCount} devices`];
-    if (summary.riskCounts.high) parts.push(`${summary.riskCounts.high} high-risk`);
-    if (summary.phases.length) parts.push(summary.phases.map(([p, c]) => `${p} (${c})`).join(' · '));
-    return parts.join(' · ');
-  };
 
   return (
     <div className={`app${present ? ' presenting' : ''}`}>

@@ -3,7 +3,6 @@ import { getRectOfNodes, getTransformForBounds } from 'reactflow';
 import { getEdgeKind } from './edgePresets.js';
 
 const PAD = 40;
-const TITLE_H = 72;
 const LEGEND_ROW_H = 28;
 
 // Theme palette — picked at export time from the current document.
@@ -11,27 +10,11 @@ function currentPalette() {
   const light = typeof document !== 'undefined'
     && document.documentElement.classList.contains('theme-light');
   return light
-    ? {
-        light,
-        bg:       '#f4f6fb',
-        titleBg:  '#ffffff',
-        legendBg: '#f1f5f9',
-        text:     '#0f172a',
-        muted:    '#64748b',
-        accent:   '#0ea5e9',
-      }
-    : {
-        light,
-        bg:       '#0f172a',
-        titleBg:  '#1e293b',
-        legendBg: '#141e33',
-        text:     '#e2e8f0',
-        muted:    '#94a3b8',
-        accent:   '#38bdf8',
-      };
+    ? { light, bg: '#f4f6fb', legendBg: '#f1f5f9', text: '#0f172a', muted: '#64748b' }
+    : { light, bg: '#0f172a', legendBg: '#141e33', text: '#e2e8f0', muted: '#94a3b8' };
 }
 
-export async function exportCanvasPng({ nodes, edges = [], title = 'Network Design', subtitle = '' }) {
+export async function exportCanvasPng({ nodes, edges = [], title = 'Network Design' }) {
   const viewport = document.querySelector('.react-flow__viewport');
   if (!viewport) throw new Error('Canvas not found');
   if (!nodes.length) throw new Error('Nothing to export');
@@ -46,7 +29,7 @@ export async function exportCanvasPng({ nodes, edges = [], title = 'Network Desi
 
   const canvasW = Math.ceil(bounds.width + PAD * 2);
   const graphH  = Math.ceil(bounds.height + PAD * 2);
-  const totalH  = TITLE_H + graphH + legendH;
+  const totalH  = graphH + legendH;
   const [x, y, zoom] = getTransformForBounds(bounds, canvasW, graphH, 0.5, 2);
 
   const graphPng = await toPng(viewport, {
@@ -63,8 +46,7 @@ export async function exportCanvasPng({ nodes, edges = [], title = 'Network Desi
 
   const dataUrl = await composeWithChrome(graphPng, {
     width: canvasW, height: totalH, graphH, legendH,
-    legendItems, legendCols,
-    title, subtitle, palette,
+    legendItems, legendCols, palette,
   });
   download(dataUrl, `${slug(title)}.png`);
 }
@@ -88,7 +70,7 @@ function collectLegend(edges) {
 }
 
 function composeWithChrome(graphPng, opts) {
-  const { width, height, graphH, legendH, legendItems, legendCols, title, subtitle, palette } = opts;
+  const { width, height, graphH, legendH, legendItems, legendCols, palette } = opts;
   return new Promise((resolve, reject) => {
     const canvas = document.createElement('canvas');
     canvas.width = width * 2;
@@ -96,36 +78,15 @@ function composeWithChrome(graphPng, opts) {
     const ctx = canvas.getContext('2d');
     ctx.scale(2, 2);
 
-    // Backdrop
     ctx.fillStyle = palette.bg;
     ctx.fillRect(0, 0, width, height);
 
-    // Title block
-    ctx.fillStyle = palette.titleBg;
-    ctx.fillRect(0, 0, width, TITLE_H);
-    ctx.fillStyle = palette.accent;
-    ctx.fillRect(0, TITLE_H - 2, width, 2);
-
-    ctx.fillStyle = palette.text;
-    ctx.font = '600 22px -apple-system, Segoe UI, Roboto, sans-serif';
-    ctx.fillText(title, 24, 32);
-
-    ctx.fillStyle = palette.muted;
-    ctx.font = '13px -apple-system, Segoe UI, Roboto, sans-serif';
-    if (subtitle) ctx.fillText(subtitle, 24, 54);
-
-    const ts = new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-    ctx.textAlign = 'right';
-    ctx.fillStyle = palette.muted;
-    ctx.fillText(ts, width - 24, 32);
-    ctx.textAlign = 'left';
-
     const img = new Image();
     img.onload = () => {
-      ctx.drawImage(img, 0, TITLE_H, width, graphH);
+      ctx.drawImage(img, 0, 0, width, graphH);
 
       if (legendH > 0) {
-        const y0 = TITLE_H + graphH;
+        const y0 = graphH;
         ctx.fillStyle = palette.legendBg;
         ctx.fillRect(0, y0, width, legendH);
         ctx.fillStyle = palette.muted;
