@@ -18,6 +18,20 @@ const OBSTACLE_PAD = 14; // halo around every non-endpoint node
 const GRID         = 10; // A* grid resolution
 const STUB         = 30; // length of the perpendicular stub from each anchor
 
+// Per-kind lateral lane offset (px, multiple of the grid). Edges of
+// different kinds following the same route get spread into parallel
+// lanes near their anchor so their paths don't overlap visually.
+// 'network' stays at 0 (the default lane), others branch off.
+const LANE_OFFSET = {
+  network:    0,
+  management: 20,
+  logs:      -20,
+  replication: 30,
+  wan:       -30,
+  planned:    10,
+};
+const laneOffset = (k) => LANE_OFFSET[k] ?? 0;
+
 const selectNodes = (s) => s.nodeInternals;
 
 export default function SmartEdge(props) {
@@ -90,10 +104,12 @@ export default function SmartEdge(props) {
   const ta = snapAnchor(
     anchorFromHandle(targetNode, tgtHandle) ?? getSideAnchor(targetNode, sourceNode)
   );
-  const ss = stubOut(sa);
-  const ts = stubOut(ta);
+  const kindKey = props.data?.kind ?? 'network';
+  const lane = laneOffset(kindKey);
+  const [ss1, ss2] = lanedStub(sa, lane);
+  const [ts1, ts2] = lanedStub(ta, lane);
 
-  const midRaw = astar(ss, ts, obstacles);
+  const midRaw = astar(ss2, ts2, obstacles);
 
   if (!midRaw) return renderWarning(id, sa, ta, style, markerEnd);
 
@@ -107,7 +123,9 @@ export default function SmartEdge(props) {
   // guaranteed axis-aligned with the anchor (the stub is perpendicular
   // to the side). Without this, an unsnapped anchor could connect to
   // the first grid point diagonally.
-  const raw = [sa, ss, ...mid, ts, ta];
+  // sa → ss1 (perpendicular stub) → ss2 (lateral lane shift) →
+  //   [A* path across obstacles] → ts2 → ts1 → ta.
+  const raw = [sa, ss1, ss2, ...mid, ts2, ts1, ta];
   const points = simplify(raw);
   const d = polyline(points);
 
@@ -223,6 +241,21 @@ function stubOut(a) {
     case Position.Right:  return { x: a.x + STUB, y: a.y };
     default:              return { x: a.x, y: a.y };
   }
+}
+
+// Two-waypoint stub: first straight out perpendicular to the side, then
+// a lateral shift along the parallel axis by `offset` px. When offset
+// is 0 both waypoints coincide and simplify() collapses them — no
+// penalty for the default lane. When offset is non-zero the edge gets
+// its own parallel lane near the anchor, so different kinds no longer
+// overlap each other on the same run.
+function lanedStub(a, offset) {
+  const tip1 = stubOut(a);
+  if (!offset) return [tip1, tip1];
+  const tip2 = (a.side === Position.Top || a.side === Position.Bottom)
+    ? { x: tip1.x + offset, y: tip1.y }
+    : { x: tip1.x,          y: tip1.y + offset };
+  return [tip1, tip2];
 }
 
 function pointInRect(x, y, r) {
