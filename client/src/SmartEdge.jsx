@@ -14,9 +14,9 @@ import { useStore, EdgeLabelRenderer, Position } from 'reactflow';
 //   * On failure (truly impossible layout) we draw a visibly broken
 //     warning edge rather than silently cut through a node.
 
-const OBSTACLE_PAD = 24; // halo around every non-endpoint node
+const OBSTACLE_PAD = 14; // halo around every non-endpoint node
 const GRID         = 10; // A* grid resolution
-const STUB         = 40; // length of the perpendicular stub from each anchor
+const STUB         = 30; // length of the perpendicular stub from each anchor
 
 const selectNodes = (s) => s.nodeInternals;
 
@@ -53,11 +53,17 @@ export default function SmartEdge(props) {
   const ss = stubOut(sa);
   const ts = stubOut(ta);
 
-  const mid = astar(ss, ts, obstacles);
+  const midRaw = astar(ss, ts, obstacles);
 
-  if (!mid) return renderWarning(id, sa, ta, style, markerEnd);
+  if (!midRaw) return renderWarning(id, sa, ta, style, markerEnd);
 
-  const raw = [sa, ss, ...mid, ts, ta];
+  // A* on a 10 px grid produces lots of tiny "staircase" steps when the
+  // start and end aren't axis-aligned. Shortcut greedily replaces runs
+  // of small corners with the farthest-reachable destination via a
+  // single L-shape, eliminating visual zigzag.
+  const mid = shortcut(midRaw, obstacles);
+
+  const raw = [sa, ...mid, ta];
   const points = simplify(raw);
   const d = polyline(points);
 
@@ -215,6 +221,75 @@ function reconstruct(cameFrom, end, sx, sy) {
 function quant(v) { return Math.round(v / GRID) * GRID; }
 
 // ---- Post-processing ----
+
+// Does an axis-aligned segment from a to b avoid every obstacle?
+// Obstacles are already padded rectangles. For a non-axis-aligned pair
+// we return false — this helper is only for orthogonal segments.
+function segmentClear(a, b, obstacles) {
+  if (a.x === b.x) {
+    const x = a.x;
+    const y1 = Math.min(a.y, b.y);
+    const y2 = Math.max(a.y, b.y);
+    for (const r of obstacles) {
+      if (x > r.x && x < r.x + r.w && y2 > r.y && y1 < r.y + r.h) return false;
+    }
+    return true;
+  }
+  if (a.y === b.y) {
+    const y = a.y;
+    const x1 = Math.min(a.x, b.x);
+    const x2 = Math.max(a.x, b.x);
+    for (const r of obstacles) {
+      if (y > r.y && y < r.y + r.h && x2 > r.x && x1 < r.x + r.w) return false;
+    }
+    return true;
+  }
+  return false;
+}
+
+// Greedy shortcut: from each point, find the farthest later point
+// reachable via a straight axis-aligned segment OR an L-shape (one
+// right-angle corner) that clears every obstacle. Replace everything
+// in between with at most one corner. Turns staircase output from A*
+// into clean right-angle bends.
+function shortcut(points, obstacles) {
+  if (points.length <= 2) return points;
+  const out = [];
+  let i = 0;
+  while (i < points.length) {
+    out.push(points[i]);
+    if (i >= points.length - 1) break;
+
+    let bestJ = i + 1;
+    let bestCorner = null;
+
+    for (let j = points.length - 1; j > i + 1; j--) {
+      const a = points[i];
+      const b = points[j];
+
+      // Straight axis-aligned shot?
+      if ((a.x === b.x || a.y === b.y) && segmentClear(a, b, obstacles)) {
+        bestJ = j; bestCorner = null; break;
+      }
+
+      // One-corner L-shape — try both possible corners, prefer neither
+      // unless both work.
+      const c1 = { x: b.x, y: a.y };
+      const c2 = { x: a.x, y: b.y };
+      const c1ok = segmentClear(a, c1, obstacles) && segmentClear(c1, b, obstacles);
+      const c2ok = segmentClear(a, c2, obstacles) && segmentClear(c2, b, obstacles);
+      if (c1ok || c2ok) {
+        bestJ = j;
+        bestCorner = c1ok ? c1 : c2;
+        break;
+      }
+    }
+
+    if (bestCorner) out.push(bestCorner);
+    i = bestJ;
+  }
+  return out;
+}
 
 // Collapse collinear runs: three points a,b,c are collinear if they
 // share the same x (vertical) or the same y (horizontal). b is then

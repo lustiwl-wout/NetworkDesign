@@ -9,7 +9,7 @@ import { device, zone, edge, zoneSize } from './_shared.js';
 
 const NET_X    = 0;
 const NET_ROW  = 200;
-const ZONE_X   = 260;
+const ZONE_X   = 340;
 const ZONE_GAP = 60;
 
 const netNode = (id, iconKey, y, data = {}) => ({

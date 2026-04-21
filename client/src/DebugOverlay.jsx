@@ -12,7 +12,7 @@ const selectTransform = (s) => s.transform;
 //   - Each edge's endpoint anchor coords
 // Plus a fixed-position HUD in the corner with totals + warnings.
 
-const OBSTACLE_PAD = 28; // must match SmartEdge.options.nodePadding
+const OBSTACLE_PAD = 14; // must match SmartEdge.OBSTACLE_PAD
 
 export default function DebugOverlay() {
   const nodes = useNodes();
