@@ -1466,17 +1466,21 @@ html, body, #root {
    connection anchor. */
 .edge-waypoint {
   position: absolute;
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
   border-radius: 2px;
   background: var(--node-bg);
   border: 2px solid var(--accent);
   pointer-events: all;
   cursor: move;
   z-index: 30;
+  opacity: 0.35;
+  transition: opacity 0.12s, background 0.12s;
 }
 .edge-waypoint.h { cursor: ns-resize; }
 .edge-waypoint.v { cursor: ew-resize; }
+.edge-waypoint:hover,
+.edge-waypoint--active { opacity: 1; }
 .edge-waypoint:hover { background: var(--accent); }
 .edge-waypoint:active { cursor: grabbing; }
 /* Hide during presentation / export. */
