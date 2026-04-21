@@ -634,7 +634,6 @@ function Editor({ me }) {
             </span>
           </div>
         )}
-        <SummaryPill summary={summary} />
         {present && (
           <button className="present-exit" onClick={() => setPresent(false)} title="Exit presentation (Esc)">
             ✕ Exit
@@ -721,27 +720,6 @@ function InspectorPopup({ onClose, children }) {
   );
 }
 
-function SummaryPill({ summary }) {
-  const { riskCounts, phases, deviceCount } = summary;
-  if (deviceCount === 0) return null;
-  return (
-    <div className="summary-pill">
-      <span><strong>{deviceCount}</strong> devices</span>
-      {(riskCounts.high || riskCounts.medium || riskCounts.low) > 0 && (
-        <span className="risk-bar">
-          <span className="rb-h" title={`${riskCounts.high} high`}>{riskCounts.high}</span>
-          <span className="rb-m" title={`${riskCounts.medium} medium`}>{riskCounts.medium}</span>
-          <span className="rb-l" title={`${riskCounts.low} low`}>{riskCounts.low}</span>
-        </span>
-      )}
-      {phases.length > 0 && (
-        <span className="summary-pill-phases">
-          {phases.map(([p, c]) => `${p} ${c}`).join(' · ')}
-        </span>
-      )}
-    </div>
-  );
-}
 
 function NodeInspector({ node, view = 'management', allDesigns = [], currentId, onChange, onDelete }) {
   const d = node.data ?? {};

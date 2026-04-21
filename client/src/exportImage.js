@@ -32,17 +32,27 @@ export async function exportCanvasPng({ nodes, edges = [], title = 'Network Desi
   const totalH  = graphH + legendH;
   const [x, y, zoom] = getTransformForBounds(bounds, canvasW, graphH, 0.5, 2);
 
-  const graphPng = await toPng(viewport, {
-    backgroundColor: palette.bg,
-    width: canvasW,
-    height: graphH,
-    pixelRatio: 2,
-    style: {
-      width: `${canvasW}px`,
-      height: `${graphH}px`,
-      transform: `translate(${x}px, ${y}px) scale(${zoom})`,
-    },
-  });
+  // Hide the big connection dots and resize controls while we capture.
+  // They're editor chrome; the PNG should look like the finished diagram.
+  const canvas = document.querySelector('.canvas');
+  canvas?.classList.add('exporting');
+
+  let graphPng;
+  try {
+    graphPng = await toPng(viewport, {
+      backgroundColor: palette.bg,
+      width: canvasW,
+      height: graphH,
+      pixelRatio: 2,
+      style: {
+        width: `${canvasW}px`,
+        height: `${graphH}px`,
+        transform: `translate(${x}px, ${y}px) scale(${zoom})`,
+      },
+    });
+  } finally {
+    canvas?.classList.remove('exporting');
+  }
 
   const dataUrl = await composeWithChrome(graphPng, {
     width: canvasW, height: totalH, graphH, legendH,

@@ -392,7 +392,10 @@ html, body, #root {
   border: 2px solid;
   border-radius: 14px;
   padding: 14px 16px 10px;
-  min-width: 170px;
+  /* Fixed 200 px width so the horizontal midpoint (100 px) lands on
+     the 10 px snap grid. Guarantees the middle connection point is
+     visually centred and grid-aligned. */
+  width: 200px;
   color: var(--text);
   text-align: center;
   transition: transform 0.12s, box-shadow 0.12s;
@@ -485,6 +488,20 @@ html, body, #root {
 .zone-handle:hover {
   opacity: 1 !important;
   box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.3);
+}
+
+/* Hide the connection-point dots during presentation mode and while
+   the editor is running an Export PNG capture. Not useful for readers
+   of the final diagram. */
+.app.presenting .port-handle,
+.app.presenting .zone-handle,
+.exporting .port-handle,
+.exporting .zone-handle {
+  display: none !important;
+}
+.app.presenting .react-flow__resize-control,
+.exporting     .react-flow__resize-control {
+  display: none !important;
 }
 
 /* Hide NodeResizer's MID-SIDE handles — they overlap our connection
