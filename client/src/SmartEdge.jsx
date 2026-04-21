@@ -16,22 +16,7 @@ import { useStore, EdgeLabelRenderer, Position } from 'reactflow';
 
 const OBSTACLE_PAD = 14; // halo around every non-endpoint node
 const GRID         = 10; // A* grid resolution
-const STUB      = 20; // straight perpendicular distance from the handle
-const LANE_STEP = 20; // extra reach before the lateral lane jog happens
-
-// Per-kind lateral lane offset (px, multiple of the grid). Edges of
-// different kinds following the same route get spread into parallel
-// lanes so their paths don't overlap. 'network' stays at 0 (the
-// default lane) — single-kind edges remain in a straight channel.
-const LANE_OFFSET = {
-  network:    0,
-  management: 20,
-  logs:      -20,
-  replication: 30,
-  wan:       -30,
-  planned:    10,
-};
-const laneOffset = (k) => LANE_OFFSET[k] ?? 0;
+const STUB      = 30; // perpendicular distance from the handle
 
 const selectNodes = (s) => s.nodeInternals;
 
@@ -105,14 +90,28 @@ export default function SmartEdge(props) {
   const ta = snapAnchor(
     anchorFromHandle(targetNode, tgtHandle) ?? getSideAnchor(targetNode, sourceNode)
   );
-  const kindKey = props.data?.kind ?? 'network';
-  const lane = laneOffset(kindKey);
-  const [ss1, ss2, ss3] = lanedStub(sa, lane);
-  const [ts1, ts2, ts3] = lanedStub(ta, lane);
+  const ss = stubOut(sa);
+  const ts = stubOut(ta);
 
-  const midRaw = astar(ss3, ts3, obstacles);
+  // User-placed waypoints act as hard bend points: A* runs segment
+  // by segment between consecutive points in [ss, ...waypoints, ts]
+  // so each leg still routes around obstacles, but the overall shape
+  // follows exactly the path the user chose.
+  const waypoints = (props.data?.waypoints ?? []).map((p) => ({
+    x: Math.round(p.x / 10) * 10,
+    y: Math.round(p.y / 10) * 10,
+  }));
+  const stops = [ss, ...waypoints, ts];
+  const legs = [];
+  for (let i = 0; i < stops.length - 1; i++) {
+    const leg = astar(stops[i], stops[i + 1], obstacles);
+    if (!leg) { legs.length = 0; break; }
+    // Avoid duplicating the shared endpoint between legs.
+    legs.push(i === 0 ? leg : leg.slice(1));
+  }
+  const midRaw = legs.flat();
 
-  if (!midRaw) return renderWarning(id, sa, ta, style, markerEnd);
+  if (!midRaw || midRaw.length === 0) return renderWarning(id, sa, ta, style, markerEnd);
 
   // A* on a 10 px grid produces lots of tiny "staircase" steps when the
   // start and end aren't axis-aligned. Shortcut greedily replaces runs
@@ -124,11 +123,7 @@ export default function SmartEdge(props) {
   // guaranteed axis-aligned with the anchor (the stub is perpendicular
   // to the side). Without this, an unsnapped anchor could connect to
   // the first grid point diagonally.
-  // sa → ss1 (perpendicular stub) → ss2 (extended perpendicular) →
-  //   ss3 (lateral lane shift) → [A* path] → ts3 → ts2 → ts1 → ta.
-  // For offset=0, ss1 === ss2 === ss3 (and same for target); simplify()
-  // drops duplicates so the network lane stays a clean straight path.
-  const raw = [sa, ss1, ss2, ss3, ...mid, ts3, ts2, ts1, ta];
+  const raw = [sa, ss, ...mid, ts, ta];
   const points = simplify(raw);
   const d = polyline(points);
 
@@ -244,40 +239,6 @@ function stubOut(a) {
     case Position.Right:  return { x: a.x + STUB, y: a.y };
     default:              return { x: a.x, y: a.y };
   }
-}
-
-// Two-waypoint stub: first straight out perpendicular to the side by
-// STUB px, then (if offset is non-zero) extend LANE_STEP further
-// perpendicular AND shift laterally by `offset` in the parallel axis.
-// The combined segment stays orthogonal — no diagonals, and the kink
-// happens at STUB + LANE_STEP px from the handle, far enough that the
-// jog reads as "parallel lane" rather than an awkward bend at the
-// node. Returns two tips: the perpendicular stub and the lane tip.
-// When offset is 0 both tips coincide; simplify() collapses them.
-// Returns three waypoints:
-//   tip1 — perpendicular stub STUB px out from the handle
-//   tip2 — extended STUB + LANE_STEP px out (still same across-axis)
-//   tip3 — tip2 shifted by `offset` px in the ACROSS axis (the lane)
-// Every segment (anchor→tip1, tip1→tip2, tip2→tip3) is axis-aligned.
-// When offset is 0, tip2 === tip3 and simplify() collapses them; in
-// practice tip1 and tip2 also collapse because we always extend by
-// LANE_STEP only when there IS an offset.
-function lanedStub(a, offset) {
-  const tip1 = stubOut(a);
-  if (!offset) return [tip1, tip1, tip1];
-  const tip2 = (() => {
-    switch (a.side) {
-      case Position.Top:    return { x: tip1.x, y: tip1.y - LANE_STEP };
-      case Position.Bottom: return { x: tip1.x, y: tip1.y + LANE_STEP };
-      case Position.Left:   return { x: tip1.x - LANE_STEP, y: tip1.y };
-      case Position.Right:  return { x: tip1.x + LANE_STEP, y: tip1.y };
-      default:              return tip1;
-    }
-  })();
-  const tip3 = (a.side === Position.Top || a.side === Position.Bottom)
-    ? { x: tip2.x + offset, y: tip2.y }
-    : { x: tip2.x,          y: tip2.y + offset };
-  return [tip1, tip2, tip3];
 }
 
 function pointInRect(x, y, r) {

@@ -989,6 +989,67 @@ function AnnotationInspector({ node, onChange, onDelete }) {
   );
 }
 
+function WaypointEditor({ edge, onChange }) {
+  const wps = edge.data?.waypoints ?? [];
+  const setWps = (next) => onChange({
+    data: { ...(edge.data ?? {}), waypoints: next },
+  });
+
+  const snap = (v) => Math.round((Number(v) || 0) / 10) * 10;
+
+  const update = (i, patch) => {
+    const next = wps.slice();
+    next[i] = { ...next[i], ...patch };
+    setWps(next);
+  };
+  const remove = (i) => setWps(wps.filter((_, j) => j !== i));
+  const add = () => {
+    // Place the new waypoint somewhere sensible: midway between the
+    // last known point and the target. We don't know the exact current
+    // path here, so seed it at the midpoint of the edge's bounding box
+    // by using the most-recent waypoint as reference, or (0, 0) which
+    // the user can immediately drag.
+    const last = wps[wps.length - 1];
+    const seed = last
+      ? { x: snap(last.x + 40), y: snap(last.y + 40) }
+      : { x: 0, y: 0 };
+    setWps([...wps, seed]);
+  };
+
+  return (
+    <>
+      <label>Waypoints (route control)</label>
+      {wps.length === 0 && (
+        <p className="hint small">
+          No waypoints — the line auto-routes. Add one to force the
+          path through a specific point.
+        </p>
+      )}
+      {wps.map((p, i) => (
+        <div key={i} className="wp-row">
+          <span className="wp-idx">#{i + 1}</span>
+          <input
+            type="number"
+            step="10"
+            value={p.x}
+            onChange={(e) => update(i, { x: snap(e.target.value) })}
+          />
+          <input
+            type="number"
+            step="10"
+            value={p.y}
+            onChange={(e) => update(i, { y: snap(e.target.value) })}
+          />
+          <button type="button" className="btn danger small" onClick={() => remove(i)}>×</button>
+        </div>
+      ))}
+      <button type="button" className="btn secondary small" onClick={add}>
+        + Add waypoint
+      </button>
+    </>
+  );
+}
+
 function EdgeInspector({ edge, view = 'management', edgeKinds = [], onChange, onKindChange, onDelete }) {
   const kindKey = edge.data?.kind ?? 'network';
   const kind = getEdgeKind(kindKey);
@@ -1029,6 +1090,8 @@ function EdgeInspector({ edge, view = 'management', edgeKinds = [], onChange, on
         value={edge.style?.stroke ?? kind.stroke ?? '#94a3b8'}
         onChange={(e) => onChange({ style: { ...(edge.style ?? {}), stroke: e.target.value } })}
       />
+
+      <WaypointEditor edge={edge} onChange={onChange} />
 
       {engineer && (
         <>
