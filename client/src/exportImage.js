@@ -14,7 +14,13 @@ function currentPalette() {
     : { light, bg: '#0f172a', legendBg: '#141e33', text: '#e2e8f0', muted: '#94a3b8' };
 }
 
-export async function exportCanvasPng({ nodes, edges = [], title = 'Network Design', includeLegend = true }) {
+export async function exportCanvasPng({
+  nodes,
+  edges = [],
+  title = 'Network Design',
+  includeLegend = true,
+  transparent = false,
+}) {
   const viewport = document.querySelector('.react-flow__viewport');
   if (!viewport) throw new Error('Canvas not found');
   if (!nodes.length) throw new Error('Nothing to export');
@@ -40,7 +46,9 @@ export async function exportCanvasPng({ nodes, edges = [], title = 'Network Desi
   let graphPng;
   try {
     graphPng = await toPng(viewport, {
-      backgroundColor: palette.bg,
+      // Omit backgroundColor entirely when transparent, so html-to-image
+      // keeps the alpha channel rather than baking a fill in.
+      ...(transparent ? {} : { backgroundColor: palette.bg }),
       width: canvasW,
       height: graphH,
       pixelRatio: 2,
@@ -56,7 +64,7 @@ export async function exportCanvasPng({ nodes, edges = [], title = 'Network Desi
 
   const dataUrl = await composeWithChrome(graphPng, {
     width: canvasW, height: totalH, graphH, legendH,
-    legendItems, legendCols, palette,
+    legendItems, legendCols, palette, transparent,
   });
   download(dataUrl, `${slug(title)}.png`);
 }
@@ -80,7 +88,7 @@ function collectLegend(edges) {
 }
 
 function composeWithChrome(graphPng, opts) {
-  const { width, height, graphH, legendH, legendItems, legendCols, palette } = opts;
+  const { width, height, graphH, legendH, legendItems, legendCols, palette, transparent } = opts;
   return new Promise((resolve, reject) => {
     const canvas = document.createElement('canvas');
     canvas.width = width * 2;
@@ -88,8 +96,10 @@ function composeWithChrome(graphPng, opts) {
     const ctx = canvas.getContext('2d');
     ctx.scale(2, 2);
 
-    ctx.fillStyle = palette.bg;
-    ctx.fillRect(0, 0, width, height);
+    if (!transparent) {
+      ctx.fillStyle = palette.bg;
+      ctx.fillRect(0, 0, width, height);
+    }
 
     const img = new Image();
     img.onload = () => {

@@ -110,6 +110,7 @@ function Editor({ me }) {
   const [present, setPresent] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [exportLegend, setExportLegend] = useState(true);
+  const [exportTransparent, setExportTransparent] = useState(false);
   const [phaseFilter, setPhaseFilter] = useState(null); // null = show all
   const [view, setView] = useState(me?.defaultView ?? 'management'); // 'management' | 'engineering'
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -389,9 +390,9 @@ function Editor({ me }) {
     } catch (e) { flash(`Delete failed: ${e.message}`); }
   };
 
-  const exportPng = async ({ includeLegend }) => {
+  const exportPng = async ({ includeLegend, transparent }) => {
     try {
-      await exportCanvasPng({ nodes, edges, title: name, includeLegend });
+      await exportCanvasPng({ nodes, edges, title: name, includeLegend, transparent });
       flash('Exported PNG');
     } catch (e) { flash(`Export failed: ${e.message}`); }
   };
@@ -533,7 +534,7 @@ function Editor({ me }) {
             Export PNG ▾
           </button>
           {exportOpen && (
-            <div className="menu-pop" style={{ minWidth: 240 }} onMouseDown={(e) => e.stopPropagation()}>
+            <div className="menu-pop" style={{ minWidth: 260 }} onMouseDown={(e) => e.stopPropagation()}>
               <label className="toggle-row" style={{ padding: '8px 10px' }}>
                 <input
                   type="checkbox"
@@ -542,13 +543,27 @@ function Editor({ me }) {
                 />
                 Include connection legend
               </label>
+              <label className="toggle-row" style={{ padding: '4px 10px 8px' }}>
+                <input
+                  type="checkbox"
+                  checked={exportTransparent}
+                  onChange={(e) => setExportTransparent(e.target.checked)}
+                />
+                Transparent background
+              </label>
               <button
                 className="menu-item"
-                onClick={() => { setExportOpen(false); exportPng({ includeLegend: exportLegend }); }}
+                onClick={() => {
+                  setExportOpen(false);
+                  exportPng({ includeLegend: exportLegend, transparent: exportTransparent });
+                }}
               >
                 <div className="menu-item-title">Export</div>
                 <div className="menu-item-desc">
-                  {exportLegend ? 'Diagram + legend of connection kinds used.' : 'Diagram only, no legend.'}
+                  {[
+                    exportLegend ? 'with legend' : 'no legend',
+                    exportTransparent ? 'transparent' : 'themed background',
+                  ].join(' · ')}
                 </div>
               </button>
             </div>
