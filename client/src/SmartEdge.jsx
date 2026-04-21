@@ -1,5 +1,6 @@
-import { useMemo } from 'react';
+import { useContext, useMemo } from 'react';
 import { useStore, useReactFlow, EdgeLabelRenderer, Position } from 'reactflow';
+import { EditorCtx } from './EditorCtx.js';
 
 // Custom orthogonal router. Built from scratch because every off-the-
 // shelf option we tried either produced diagonals at the endpoints or
@@ -130,16 +131,15 @@ export default function SmartEdge(props) {
   const centre = points[Math.floor(points.length / 2)];
   const totalLen = polylineLength(points);
 
-  const { screenToFlowPosition, setEdges } = useReactFlow();
+  const { screenToFlowPosition } = useReactFlow();
+  const { setEdges: setEdgesCtx } = useContext(EditorCtx);
   const snap = (v) => Math.round(v / 10) * 10;
-  // Double-click on the path adds a new waypoint at the click. Inserts
-  // it after the waypoint whose slot it geographically belongs to, so
-  // multi-bend edges stay consistent.
+  // Double-click on the path adds a new waypoint at the click position.
   const addWaypointAtEvent = (ev) => {
     ev.stopPropagation();
     const pt = screenToFlowPosition({ x: ev.clientX, y: ev.clientY });
     const click = { x: snap(pt.x), y: snap(pt.y) };
-    setEdges((eds) => eds.map((e) => {
+    setEdgesCtx((eds) => eds.map((e) => {
       if (e.id !== id) return e;
       const wps = [...(e.data?.waypoints ?? [])];
       wps.push(click);
@@ -200,7 +200,8 @@ export default function SmartEdge(props) {
 }
 
 function WaypointHandles({ edgeId, waypoints }) {
-  const { screenToFlowPosition, setEdges } = useReactFlow();
+  const { screenToFlowPosition } = useReactFlow();
+  const { setEdges } = useContext(EditorCtx);
   const snap = (v) => Math.round(v / 10) * 10;
 
   const update = (i, point) => {
@@ -219,19 +220,31 @@ function WaypointHandles({ edgeId, waypoints }) {
     }));
   };
 
+  // Pointer capture: once the element has the pointer, every further
+  // move / up fires on it, regardless of whether the cursor wanders
+  // off. Works across mouse, touch and pen; prevents React Flow's
+  // pan handler from ever seeing the drag.
   const startDrag = (e, i) => {
     e.stopPropagation();
     e.preventDefault();
-    const move = (ev) => {
-      const pt = screenToFlowPosition({ x: ev.clientX, y: ev.clientY });
-      update(i, { x: snap(pt.x), y: snap(pt.y) });
+    const el = e.currentTarget;
+    const pointerId = e.pointerId;
+    try { el.setPointerCapture?.(pointerId); } catch {}
+    const onMove = (ev) => {
+      try {
+        const pt = screenToFlowPosition({ x: ev.clientX, y: ev.clientY });
+        update(i, { x: snap(pt.x), y: snap(pt.y) });
+      } catch {}
     };
-    const up = () => {
-      window.removeEventListener('mousemove', move);
-      window.removeEventListener('mouseup', up);
+    const onUp = () => {
+      try { el.releasePointerCapture?.(pointerId); } catch {}
+      el.removeEventListener('pointermove', onMove);
+      el.removeEventListener('pointerup', onUp);
+      el.removeEventListener('pointercancel', onUp);
     };
-    window.addEventListener('mousemove', move);
-    window.addEventListener('mouseup', up);
+    el.addEventListener('pointermove', onMove);
+    el.addEventListener('pointerup', onUp);
+    el.addEventListener('pointercancel', onUp);
   };
 
   return waypoints.map((p, i) => (
@@ -239,7 +252,7 @@ function WaypointHandles({ edgeId, waypoints }) {
       key={i}
       className="edge-waypoint"
       style={{ transform: `translate(-50%, -50%) translate(${p.x}px, ${p.y}px)` }}
-      onMouseDown={(e) => startDrag(e, i)}
+      onPointerDown={(e) => startDrag(e, i)}
       onDoubleClick={(e) => { e.stopPropagation(); remove(i); }}
       title="Drag to move · double-click to remove"
     />

@@ -1461,22 +1461,22 @@ html, body, #root {
   transform: none;
   background: var(--bg);
 }
-/* Draggable waypoint dot shown on a selected edge. Drag to move the
-   bend; double-click to remove it. */
+/* Waypoint drag handle. Visually an OPEN SQUARE — same metaphor as a
+   resize handle — so users see it as "grab to reshape", not as a
+   connection anchor. */
 .edge-waypoint {
   position: absolute;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: var(--accent);
-  border: 2px solid var(--text);
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  background: var(--node-bg);
+  border: 2px solid var(--accent);
   pointer-events: all;
-  cursor: grab;
+  cursor: move;
   z-index: 30;
-  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.25);
 }
+.edge-waypoint:hover { background: var(--accent); }
 .edge-waypoint:active { cursor: grabbing; }
-.edge-waypoint:hover { box-shadow: 0 0 0 5px rgba(56, 189, 248, 0.35); }
 /* Hide during presentation / export. */
 .app.presenting .edge-waypoint,
 .exporting .edge-waypoint { display: none !important; }

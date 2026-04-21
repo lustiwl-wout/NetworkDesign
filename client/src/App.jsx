@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { EditorCtx } from './EditorCtx.js';
 import ReactFlow, {
   Background,
   Controls,
@@ -641,6 +642,7 @@ function Editor({ me }) {
       </aside>
 
       <div className={`canvas view-${view}`} ref={wrapperRef} onDrop={onDrop} onDragOver={onDragOver}>
+        <EditorCtx.Provider value={{ setEdges }}>
         <ReactFlow
           nodes={phasedNodes}
           edges={phasedEdges}
@@ -668,6 +670,7 @@ function Editor({ me }) {
           <Controls />
           <MiniMap pannable zoomable maskColor="rgba(15,23,42,0.6)" />
         </ReactFlow>
+        </EditorCtx.Provider>
         {!canSave && (
           <div className="demo-banner" role="status">
             <strong>{me ? 'Demo account' : 'Guest mode'}</strong>
