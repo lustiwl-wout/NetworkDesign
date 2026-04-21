@@ -1487,16 +1487,6 @@ html, body, #root {
 .app.presenting .edge-waypoint,
 .exporting .edge-waypoint { display: none !important; }
 
-.wp-row {
-  display: grid;
-  grid-template-columns: 28px 1fr 1fr 32px;
-  gap: 6px;
-  align-items: center;
-  margin-bottom: 6px;
-}
-.wp-idx { font-size: 11px; color: var(--muted); text-align: right; }
-.wp-row input { margin: 0; }
-
 .handle-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
