@@ -392,6 +392,20 @@ html, body, #root {
 .net-node:hover  .port-handle { opacity: 0.6; }
 .net-node.selected .port-handle { opacity: 1; }
 
+/* Zone connection handles — same four-sided anchor scheme as devices,
+   but sized to sit on the zone's big border. Hidden until the zone or
+   a connecting edge touches it. */
+.zone-handle {
+  width: 12px !important;
+  height: 12px !important;
+  border: 2px solid var(--text) !important;
+  opacity: 0;
+  pointer-events: auto;
+  transition: opacity 0.12s;
+}
+.zone-node:hover .zone-handle { opacity: 0.45; }
+.zone-node.selected .zone-handle { opacity: 0.9; }
+
 /* Zone node */
 .zone-node {
   position: relative;

@@ -1,73 +1,64 @@
 import { device, zone, edge, zoneSize } from './_shared.js';
 
 const Z = {
-  prod:   zoneSize(2, 2),
-  airgap: zoneSize(1, 3),
-  ire:    zoneSize(3, 2),
-  mgmt:   zoneSize(2, 1),
+  prod: zoneSize(2, 2),
+  ire:  zoneSize(2, 2),
 };
 
-const GAP = 40;
-const Z_PROD   = { x: 0, y: 0 };
-const Z_AIR    = { x: Z.prod.width + GAP, y: 0 };
-const Z_IRE    = { x: Z.prod.width + Z.airgap.width + GAP * 2, y: 0 };
-const Z_MGMT   = { x: Z.prod.width + Z.airgap.width + GAP * 2, y: Z.ire.height + GAP };
+const GAP = 60;
+const Z_PROD = { x: 0, y: 100 };
+const MID_X  = Z.prod.width + GAP;
+const Z_IRE  = { x: MID_X + 220 + GAP, y: 100 };
+
+const netNode = (id, iconKey, x, y, data = {}) => ({
+  id, type: 'device', position: { x, y },
+  data: { iconKey, ...data },
+});
 
 export default {
   id: 'isolated-recovery-environment',
   name: 'Isolated Recovery Environment (IRE)',
   description:
-    'Cyber-resilient recovery: production replicates one-way into an air-gapped vault containing immutable backups, a clean-room recovery environment, and forensic tooling. Aligns with NIST SP 800-209 and Sheltered Harbor guidance.',
+    'Production workloads replicate one-way through an air-gapped diode into the IRE, which hosts immutable backups and clean-room recovery VMs. Aligns with NIST SP 800-209 / Sheltered Harbor.',
   graph: {
     nodes: [
-      zone('zone-prod',   Z_PROD.x, Z_PROD.y, Z.prod.width,   Z.prod.height,
+      // Zones hold workloads only
+      zone('zone-prod', Z_PROD.x, Z_PROD.y, Z.prod.width, Z.prod.height,
         { color: '#3b82f6', label: 'Production', sublabel: 'Live business services' }),
-      zone('zone-airgap', Z_AIR.x,  Z_AIR.y,  Z.airgap.width, Z.airgap.height,
-        { color: '#64748b', label: 'Air Gap',    sublabel: 'One-way, scheduled' }),
-      zone('zone-ire',    Z_IRE.x,  Z_IRE.y,  Z.ire.width,    Z.ire.height,
-        { color: '#22c55e', label: 'Isolated Recovery Environment', sublabel: 'Immutable · Air-gapped · Clean room' }),
-      zone('zone-mgmt',   Z_MGMT.x, Z_MGMT.y, Z.mgmt.width,   Z.mgmt.height,
-        { color: '#94a3b8', label: 'Out-of-Band Management' }),
+      zone('zone-ire', Z_IRE.x, Z_IRE.y, Z.ire.width, Z.ire.height,
+        { color: '#22c55e', label: 'Isolated Recovery Environment', sublabel: 'Immutable · Clean room' }),
 
-      // Production (2x2)
-      device('prod-db',     'database', 'zone-prod', 0, 0, { label: 'Production DB',    capacity: '40 TB',  risk: 'high',   phase: 'Current' }),
-      device('prod-app',    'vm',       'zone-prod', 1, 0, { label: 'Application VMs',  capacity: '120 VMs', risk: 'medium', phase: 'Current' }),
-      device('prod-sw',     'switch',   'zone-prod', 0, 1, { label: 'Core Switch',                           risk: 'medium', phase: 'Current' }),
-      device('prod-backup', 'server',   'zone-prod', 1, 1, { label: 'Backup Source',    capacity: 'Proxy / media', risk: 'medium', phase: 'Current' }),
+      // Production workloads
+      device('prod-db',     'database', 'zone-prod', 0, 0, { label: 'Production DB',   capacity: '40 TB', risk: 'high',   phase: 'Current' }),
+      device('prod-app',    'vm',       'zone-prod', 1, 0, { label: 'Application VMs', capacity: '120 VMs', risk: 'medium', phase: 'Current' }),
+      device('prod-backup', 'server',   'zone-prod', 0, 1, { label: 'Backup Source',   capacity: 'Proxy / media', risk: 'medium', phase: 'Current' }),
 
-      // Air-gap (1x2): a single repeater to anchor the replication edge.
-      // Marked as an input boundary — the IRE has exactly one ingress
-      // (backups) and, by design, no egress.
-      device('air-in',     'boundary-input', 'zone-airgap', 0, 0, { label: 'Replication Ingress', capacity: 'Scheduled only', phase: 'Current' }),
-      device('air-relay',  'cloud',          'zone-airgap', 0, 1, { label: 'One-way Diode',        capacity: 'Scheduled',      phase: 'Current' }),
+      // IRE workloads
+      device('ire-vault',    'database', 'zone-ire', 0, 0, { label: 'Immutable Vault',        capacity: '500 TB · Object Lock', risk: 'low',  phase: 'Proposed' }),
+      device('ire-recovery', 'vm',       'zone-ire', 1, 0, { label: 'Clean-room Recovery VMs', capacity: '8 restore VMs',       risk: 'low',  phase: 'Proposed' }),
+      device('ire-forensic', 'client',   'zone-ire', 0, 1, { label: 'Forensic Workstation',    capacity: 'Malware analysis',    risk: 'low',  phase: 'Proposed' }),
 
-      // IRE (3x2)
-      device('ire-fw',       'firewall', 'zone-ire', 0, 0, { label: 'Vault Firewall',        capacity: 'Ingress-only', risk: 'low', phase: 'Proposed' }),
-      device('ire-sw',       'switch',   'zone-ire', 1, 0, { label: 'Vault Switch',          capacity: 'Isolated VLAN', risk: 'low', phase: 'Proposed' }),
-      device('ire-forensic', 'client',   'zone-ire', 2, 0, { label: 'Forensic Workstation',  capacity: 'Malware analysis', risk: 'low', phase: 'Proposed' }),
-      device('ire-vault',    'database', 'zone-ire', 0, 1, { label: 'Immutable Backup Vault', capacity: '500 TB · Object Lock', risk: 'low', phase: 'Proposed' }),
-      device('ire-recovery', 'vm',       'zone-ire', 1, 1, { label: 'Clean-room Recovery VMs', capacity: '8 restore VMs', risk: 'low', phase: 'Proposed' }),
+      // Network devices (outside the zones): firewalls, diode
+      netNode('prod-fw',   'firewall', MID_X, 40,  { label: 'Prod Firewall',  risk: 'medium' }),
+      netNode('air-in',    'boundary-input', MID_X, 180, { label: 'Replication Ingress', capacity: 'Scheduled only', phase: 'Current' }),
+      netNode('air-relay', 'cloud',    MID_X, 320, { label: 'One-way Diode',   capacity: 'Scheduled' }),
+      netNode('ire-fw',    'firewall', MID_X, 460, { label: 'Vault Firewall', capacity: 'Ingress-only', risk: 'low', phase: 'Proposed' }),
 
-      // Management (2x1)
-      device('mgmt-jump', 'server', 'zone-mgmt', 0, 0, { label: 'Jump Host (OOB)',  capacity: 'MFA · PAM', risk: 'low', phase: 'Proposed' }),
-      device('mgmt-siem', 'server', 'zone-mgmt', 1, 0, { label: 'SIEM Forwarder',    capacity: 'Read-only logs', risk: 'low', phase: 'Proposed' }),
+      // OOB management outside zones
+      netNode('mgmt-jump', 'server', Z_IRE.x, Z_IRE.y + Z.ire.height + GAP,        { label: 'Jump Host (OOB)', capacity: 'MFA · PAM', phase: 'Proposed' }),
+      netNode('mgmt-siem', 'server', Z_IRE.x + 220, Z_IRE.y + Z.ire.height + GAP,  { label: 'SIEM Forwarder', capacity: 'Read-only logs', phase: 'Proposed' }),
     ],
     edges: [
-      edge('e1', 'prod-db',  'prod-sw', 'network'),
-      edge('e2', 'prod-app', 'prod-sw', 'network'),
-      edge('e3', 'prod-sw',  'prod-backup', 'network'),
+      // Production zone → firewall → diode → IRE firewall → IRE zone (one-way replication flow)
+      edge('e1', 'zone-prod', 'prod-fw',   'network'),
+      edge('e2', 'prod-fw',   'air-in',    'replication', { label: 'One-way replication' }),
+      edge('e3', 'air-in',    'air-relay', 'replication'),
+      edge('e4', 'air-relay', 'ire-fw',    'replication'),
+      edge('e5', 'ire-fw',    'zone-ire',  'replication'),
 
-      edge('e-airgap', 'prod-backup', 'air-in',    'replication', { label: 'One-way replication' }),
-      edge('e-relay',  'air-in',      'air-relay', 'replication'),
-      edge('e-ire-in', 'air-relay',   'ire-fw',    'replication'),
-
-      edge('e4', 'ire-fw', 'ire-sw',        'network'),
-      edge('e5', 'ire-sw', 'ire-vault',     'network'),
-      edge('e6', 'ire-sw', 'ire-recovery',  'network'),
-      edge('e7', 'ire-sw', 'ire-forensic',  'network'),
-
-      edge('e8',  'mgmt-jump', 'ire-sw', 'management', { label: 'Admin' }),
-      edge('e9',  'mgmt-siem', 'ire-sw', 'logs',       { label: 'Log export' }),
+      // OOB management plane into the IRE zone
+      edge('m1', 'mgmt-jump', 'zone-ire', 'management', { label: 'Admin (via jump host)' }),
+      edge('m2', 'mgmt-siem', 'zone-ire', 'logs',       { label: 'Log export' }),
     ],
   },
 };

@@ -28,8 +28,9 @@ export default function SmartEdge(props) {
   const targetNode = nodeInternals.get(target);
 
   // Obstacles: every measured device EXCEPT the edge's own endpoints.
-  // The router can't find a path if its start/end points sit inside a
-  // walled-off node.
+  // Zones are NOT obstacles — they're containers, and lines should pass
+  // freely over zone backgrounds. Workloads inside zones are still
+  // obstacles, so routing avoids those.
   const obstacles = useMemo(() => {
     const list = [];
     for (const n of nodeInternals.values()) {
