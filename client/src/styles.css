@@ -1087,16 +1087,22 @@ html, body, #root {
 
 /* Role pill in users admin */
 .role-pill {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 20px;
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  padding: 2px 8px;
+  padding: 0 10px;
   border-radius: 999px;
   background: var(--panel-2);
   color: var(--muted);
   border: 1px solid var(--border);
+  line-height: 1;
+  white-space: nowrap;
+  vertical-align: middle;
 }
 .role-pill.admin { background: rgba(56, 189, 248, 0.15); color: var(--accent); border-color: var(--accent); }
 
@@ -1140,6 +1146,11 @@ html, body, #root {
   gap: 20px;
   align-items: start;
 }
+/* When no form is open (single child), drop the second column so the
+   list doesn't get stretched across an empty panel-width. */
+.admin-grid:has(> :only-child) {
+  grid-template-columns: 1fr;
+}
 .admin-list {
   background: var(--panel);
   border: 1px solid var(--border);
@@ -1172,6 +1183,8 @@ html, body, #root {
   border-bottom: 1px solid #27334a;
   font-size: 13px;
   vertical-align: middle;
+  line-height: 1.4;
+  height: 1px; /* tightens row to content */
 }
 .admin-list tbody tr.editing { background: rgba(56, 189, 248, 0.06); }
 .admin-list code {
