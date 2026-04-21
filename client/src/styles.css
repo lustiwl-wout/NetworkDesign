@@ -851,6 +851,33 @@ html, body, #root {
   font-size: 14px;
   border-radius: 8px;
   width: 100%;
+  display: block;
+  text-align: center;
+  box-sizing: border-box;
+  text-decoration: none;
+}
+.btn.btn-ghost {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border);
+  margin-top: 10px;
+}
+.btn.btn-ghost:hover { background: var(--panel-2); color: var(--text); }
+
+.login-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 11px;
+  margin: 18px 0 2px;
+}
+.login-divider::before,
+.login-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
 }
 .auth-card {
   width: 100%;

@@ -1,20 +1,21 @@
 import { useEffect, useState } from 'react';
 import { api } from './api.js';
 
-export default function DesignsPage() {
+export default function DesignsPage({ me }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState(null);
   const [query, setQuery] = useState('');
 
   const load = async () => {
+    if (!me) { setLoading(false); return; } // anonymous — no fetch
     setLoading(true);
     try { setItems(await api.list()); setErr(null); }
     catch (e) { setErr(e.message); }
     finally { setLoading(false); }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [me]);
 
   const remove = async (id, name) => {
     if (!confirm(`Delete "${name}"?`)) return;
@@ -43,7 +44,19 @@ export default function DesignsPage() {
       <main className="admin-main">
         {err && <div className="admin-error">{err}</div>}
         {loading && <div className="hint">Loading…</div>}
-        {!loading && filtered.length === 0 && (
+        {!me && (
+          <div className="empty-state">
+            <h2>Sign in to save designs</h2>
+            <p className="hint">
+              Guest mode lets you build and export PNGs, but you need an
+              account to save designs between sessions.
+            </p>
+            <a className="btn" href="/login">Sign in</a>
+            <div style={{ height: 8 }} />
+            <a className="btn secondary" href="/">Back to editor</a>
+          </div>
+        )}
+        {me && !loading && filtered.length === 0 && (
           <div className="empty-state">
             <h2>No saved designs yet</h2>
             <p className="hint">

@@ -58,6 +58,9 @@ function styleEdges(edges) {
 }
 
 function Editor({ me }) {
+  // Write access: logged in as user or admin (but not the view-only "viewer" role).
+  const canSave = !!me && me.role !== 'viewer';
+  const isAdmin = me?.role === 'admin';
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [deviceTypes, setDeviceTypes] = useState([]);
@@ -302,7 +305,7 @@ function Editor({ me }) {
   };
 
   const saveDesign = async () => {
-    if (me?.role === 'viewer') {
+    if (!canSave) {
       flash('Demo mode — Save is disabled. Use Export PNG.');
       return;
     }
@@ -500,7 +503,7 @@ function Editor({ me }) {
         <button className="btn secondary" onClick={() => setCaseOpen(true)} title="Business case narrative">
           Case
         </button>
-        {me?.role !== 'viewer' && currentId && (
+        {canSave && currentId && (
           <button className="btn secondary" onClick={() => { setHistoryOpen(true); loadVersions(); }} title="Version history">
             History
           </button>
@@ -516,16 +519,20 @@ function Editor({ me }) {
         >
           🐞 Debug
         </button>
-        {me?.role !== 'viewer' && <button className="btn" onClick={saveDesign}>Save</button>}
-        {me?.role !== 'viewer' && currentId && (
+        {canSave && <button className="btn" onClick={saveDesign}>Save</button>}
+        {canSave && currentId && (
           <button className="btn danger" onClick={deleteDesign}>Delete</button>
         )}
-        {me?.role === 'admin' && (
+        {isAdmin && (
           <a className="btn secondary" href="/admin" title="Admin portal">⚙︎ Admin</a>
         )}
-        <a className="btn secondary" href="/profile" title={me?.email}>
-          {me?.displayName || me?.email?.split('@')[0] || 'Profile'}
-        </a>
+        {me ? (
+          <a className="btn secondary" href="/profile" title={me.email}>
+            {me.displayName || me.email?.split('@')[0] || 'Profile'}
+          </a>
+        ) : (
+          <a className="btn" href="/login">Sign in</a>
+        )}
       </div>
 
       <aside className="palette">
@@ -605,16 +612,19 @@ function Editor({ me }) {
           <MiniMap pannable zoomable maskColor="rgba(15,23,42,0.6)" />
           {debug && <DebugOverlay />}
         </ReactFlow>
-        {me?.role === 'viewer' && (
+        {!canSave && (
           <div className="demo-banner" role="status">
-            <strong>Demo mode</strong>
+            <strong>{me ? 'Demo account' : 'Guest mode'}</strong>
             <span>
-              Your account is <b>view-only</b>. You can build and explore templates, but
-              designs can't be saved here. Use <b>Export PNG</b> to keep your work.
+              {me
+                ? 'Your account is view-only. Use Export PNG to keep your work.'
+                : 'You can build and explore templates, but designs aren\'t saved. '}
+              {!me && <a href="/login">Sign in</a>}
+              {!me && ' to save.'}
             </span>
           </div>
         )}
-        {me?.role !== 'viewer' && summary.deviceCount > 0 && summary.inputCount === 0 && (
+        {canSave && summary.deviceCount > 0 && summary.inputCount === 0 && (
           <div className="validation-banner" role="status">
             <strong>⚠︎ No input boundary</strong>
             <span>
@@ -1043,12 +1053,12 @@ function EdgeInspector({ edge, view = 'management', onChange, onKindChange, onDe
 }
 
 function Root() {
-  const [me, setMe] = useState(undefined); // undefined = loading, null = unauthed
+  const [me, setMe] = useState(undefined); // undefined = loading
   const path = typeof window !== 'undefined' ? window.location.pathname : '/';
 
   const refreshMe = useCallback(async () => {
     try { setMe(await authApi.me()); }
-    catch (e) { if (e.status === 401) setMe(null); else console.error(e); }
+    catch (e) { console.error(e); setMe({ user: null }); }
   }, []);
 
   useEffect(() => { refreshMe(); }, [refreshMe]);
@@ -1057,26 +1067,37 @@ function Root() {
     return <div className="auth-shell"><div className="hint">Loading…</div></div>;
   }
 
-  if (!me || !me.user || me.mfaRequired) {
-    return (
-      <LoginPage
-        initialMfa={!!me?.mfaRequired}
-        onAuthed={refreshMe}
-      />
-    );
+  // A logged-in user whose MFA is still required must clear it first.
+  if (me.user && me.mfaRequired) {
+    return <LoginPage initialMfa onAuthed={refreshMe} />;
   }
 
+  // Explicit /login URL — show the sign-in page (unless already signed in).
+  if (path.startsWith('/login')) {
+    if (me.user) { window.location.href = '/'; return null; }
+    return <LoginPage onAuthed={refreshMe} />;
+  }
+
+  // Admin portal: requires sign-in + admin role.
   if (path.startsWith('/admin')) {
+    if (!me.user) return <LoginPage onAuthed={refreshMe} />;
     if (me.user.role !== 'admin') return <Forbidden me={me.user} />;
     return <AdminPortal />;
   }
+
+  // Profile requires a signed-in user (there's nothing to show for guests).
   if (path.startsWith('/profile')) {
+    if (!me.user) return <LoginPage onAuthed={refreshMe} />;
     return <ProfilePage me={me.user} onChange={refreshMe} />;
   }
+
+  // /designs works for guests — it just shows an empty state.
   if (path.startsWith('/designs')) {
     return <DesignsPage me={me.user} />;
   }
 
+  // Editor is available to everyone. Anonymous users get a demo banner
+  // and the Save / Delete / History actions are hidden.
   return (
     <ReactFlowProvider>
       <Editor me={me.user} />

@@ -15,7 +15,9 @@ const toSnake = (k) => k.replace(/([A-Z])/g, '_$1').toLowerCase();
 export function catalogRouter({ table, allowedFields, required }) {
   const router = Router();
 
-  router.get('/', requireAuth, async (_req, res, next) => {
+  // Catalogs are effectively public — no sensitive data, and the editor
+  // needs them to render the palette for guest users too.
+  router.get('/', async (_req, res, next) => {
     try {
       const { rows } = await pool.query(
         `SELECT * FROM ${table} ORDER BY sort_order ASC, label ASC`
@@ -24,7 +26,7 @@ export function catalogRouter({ table, allowedFields, required }) {
     } catch (err) { next(err); }
   });
 
-  router.get('/:id', requireAuth, async (req, res, next) => {
+  router.get('/:id', async (req, res, next) => {
     try {
       const { rows } = await pool.query(`SELECT * FROM ${table} WHERE id = $1`, [req.params.id]);
       if (!rows.length) return res.status(404).json({ error: 'Not found' });

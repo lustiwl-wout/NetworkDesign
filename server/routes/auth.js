@@ -62,8 +62,11 @@ authRouter.post('/logout', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Returns the current session if any, or { user: null } when anonymous.
+// Anonymous is a first-class state now — the editor runs without login
+// as a guest / viewer; authenticating unlocks saving.
 authRouter.get('/me', async (req, res) => {
-  if (!req.auth) return res.status(401).json({ error: 'not authenticated' });
+  if (!req.auth) return res.json({ user: null });
   res.json({
     user: req.auth.user,
     mfaVerified: req.auth.mfaVerified,

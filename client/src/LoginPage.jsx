@@ -116,8 +116,14 @@ export default function LoginPage({ onAuthed, initialMfa = false }) {
               <button className="btn btn-lg" type="submit" disabled={busy}>
                 {busy ? '…' : 'Sign in'}
               </button>
-              <p className="hint small">
-                Lost your MFA device? Contact an administrator.
+
+              <div className="login-divider"><span>or</span></div>
+              <a className="btn btn-lg btn-ghost" href="/">
+                Continue as guest
+              </a>
+              <p className="hint small" style={{ marginTop: 14 }}>
+                Guests can build designs and export PNGs, but cannot save.
+                Sign in to keep your work and access templates history.
               </p>
             </form>
           )}
