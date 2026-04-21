@@ -1475,6 +1475,8 @@ html, body, #root {
   cursor: move;
   z-index: 30;
 }
+.edge-waypoint.h { cursor: ns-resize; }
+.edge-waypoint.v { cursor: ew-resize; }
 .edge-waypoint:hover { background: var(--accent); }
 .edge-waypoint:active { cursor: grabbing; }
 /* Hide during presentation / export. */

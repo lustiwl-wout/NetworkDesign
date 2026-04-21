@@ -189,14 +189,94 @@ export default function SmartEdge(props) {
       )}
       {selected && (
         <EdgeLabelRenderer>
-          <WaypointHandles
-            edgeId={id}
-            waypoints={waypoints}
-          />
+          <SegmentHandles edgeId={id} points={points} />
         </EdgeLabelRenderer>
       )}
     </>
   );
+}
+
+// Draggable handles at the MIDPOINT of every straight segment of the
+// current path (auto-computed, no double-click needed). Dragging shifts
+// the line through the cursor: first drag creates a waypoint; the same
+// segment's handle on later drags reuses the waypoint near it.
+function SegmentHandles({ edgeId, points }) {
+  const { screenToFlowPosition } = useReactFlow();
+  const { setEdges } = useContext(EditorCtx);
+  const snap = (v) => Math.round(v / 10) * 10;
+
+  // Pre-compute each segment's midpoint, skipping tiny ones so handles
+  // don't pile up near corners.
+  const segments = useMemo(() => {
+    const segs = [];
+    for (let i = 0; i < points.length - 1; i++) {
+      const a = points[i], b = points[i + 1];
+      const len = Math.abs(b.x - a.x) + Math.abs(b.y - a.y);
+      if (len < 60) continue;
+      segs.push({
+        mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 },
+        horizontal: a.y === b.y,
+      });
+    }
+    return segs;
+  }, [points]);
+
+  const startDrag = (e, seg) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const el = e.currentTarget;
+    const pointerId = e.pointerId;
+    try { el.setPointerCapture?.(pointerId); } catch {}
+
+    // Track which waypoint index this drag owns. On first move we
+    // either adopt an existing waypoint near the segment midpoint or
+    // append a new one.
+    let ownedIdx = null;
+
+    const upsert = (pt) => {
+      try {
+        setEdges((eds) => eds.map((ed) => {
+          if (ed.id !== edgeId) return ed;
+          const wps = [...(ed.data?.waypoints ?? [])];
+          if (ownedIdx === null) {
+            const i = wps.findIndex((w) =>
+              Math.abs(w.x - seg.mid.x) + Math.abs(w.y - seg.mid.y) < 60
+            );
+            if (i >= 0) ownedIdx = i;
+            else { wps.push(pt); ownedIdx = wps.length - 1; return { ...ed, data: { ...(ed.data ?? {}), waypoints: wps } }; }
+          }
+          wps[ownedIdx] = pt;
+          return { ...ed, data: { ...(ed.data ?? {}), waypoints: wps } };
+        }));
+      } catch {}
+    };
+
+    const onMove = (ev) => {
+      try {
+        const pt = screenToFlowPosition({ x: ev.clientX, y: ev.clientY });
+        upsert({ x: snap(pt.x), y: snap(pt.y) });
+      } catch {}
+    };
+    const onUp = () => {
+      try { el.releasePointerCapture?.(pointerId); } catch {}
+      el.removeEventListener('pointermove', onMove);
+      el.removeEventListener('pointerup', onUp);
+      el.removeEventListener('pointercancel', onUp);
+    };
+    el.addEventListener('pointermove', onMove);
+    el.addEventListener('pointerup', onUp);
+    el.addEventListener('pointercancel', onUp);
+  };
+
+  return segments.map((seg, i) => (
+    <div
+      key={i}
+      className={`edge-waypoint ${seg.horizontal ? 'h' : 'v'}`}
+      style={{ transform: `translate(-50%, -50%) translate(${seg.mid.x}px, ${seg.mid.y}px)` }}
+      onPointerDown={(e) => startDrag(e, seg)}
+      title="Drag to reshape the line"
+    />
+  ));
 }
 
 function WaypointHandles({ edgeId, waypoints }) {

@@ -1023,12 +1023,23 @@ function WaypointEditor({ edge, onChange }) {
     <>
       <label>Waypoints (route control)</label>
       <p className="hint small">
-        <b>Double-click the line</b> on the canvas to add a bend, then
-        drag the dot to steer. Double-click a dot to remove it. X and Y
-        snap to the 10 px grid.
+        <b>Drag the small squares</b> on the selected line to reshape
+        it — they appear at the middle of every straight segment.
+        Dragging adds or adjusts a waypoint under the hood. Double-click
+        the line to drop an extra waypoint at an arbitrary spot.
       </p>
+      {wps.length > 0 && (
+        <button
+          type="button"
+          className="btn secondary small"
+          onClick={() => setWps([])}
+          style={{ marginBottom: 8 }}
+        >
+          Reset path (remove all waypoints)
+        </button>
+      )}
       {wps.length === 0 && (
-        <p className="hint small">No waypoints — the line auto-routes.</p>
+        <p className="hint small">No waypoints stored yet — the line auto-routes.</p>
       )}
       {wps.map((p, i) => (
         <div key={i} className="wp-row">
