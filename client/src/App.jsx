@@ -59,8 +59,41 @@ function Editor({ me }) {
   const canSave = !!me && me.role !== 'viewer';
   const isAdmin = me?.role === 'admin';
   const [theme, setTheme] = useTheme();
-  const [nodes, setNodes, onNodesChange] = useNodesState([]);
+  const [nodes, setNodes, onNodesChangeRaw] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  // nodeId -> { cx, cy } in flow coords. Populated when a user drops a
+  // palette item; consumed once the node's real dimensions are measured,
+  // then the node is re-centred exactly on the cursor.
+  const pendingDropRef = useRef(new Map());
+
+  const onNodesChange = useCallback((changes) => {
+    onNodesChangeRaw(changes);
+    for (const ch of changes) {
+      if (ch.type !== 'dimensions' || !ch.dimensions) continue;
+      const pending = pendingDropRef.current.get(ch.id);
+      if (!pending) continue;
+      pendingDropRef.current.delete(ch.id);
+      const { cx, cy } = pending;
+      const w = ch.dimensions.width;
+      const h = ch.dimensions.height;
+      const snap = (v) => Math.round(v / 10) * 10;
+      const newTop = { x: snap(cx - w / 2), y: snap(cy - h / 2) };
+      setNodes((nds) =>
+        nds.map((n) => {
+          if (n.id !== ch.id) return n;
+          // If parented to a zone, keep parentNode and translate the
+          // absolute-centre position into parent-relative coords.
+          if (n.parentNode) {
+            const parent = nds.find((p) => p.id === n.parentNode);
+            if (parent) {
+              return { ...n, position: { x: newTop.x - parent.position.x, y: newTop.y - parent.position.y } };
+            }
+          }
+          return { ...n, position: newTop };
+        })
+      );
+    }
+  }, [onNodesChangeRaw, setNodes]);
   const [deviceTypes, setDeviceTypes] = useState([]);
   const [zoneTypes, setZoneTypes] = useState([]);
   const [currentId, setCurrentId] = useState(null);
@@ -165,35 +198,34 @@ function Editor({ me }) {
       const { kind, value } = JSON.parse(raw);
       const cursor = screenToFlowPosition({ x: event.clientX, y: event.clientY });
 
-      // Figure out the intended size of the node being dropped so we can
-      // centre it on the cursor (React Flow positions by top-left).
-      let width = 180, height = 160; // device default
+      // Rough initial position so the node shows up near the cursor in
+      // the first frame. The real centring happens in onNodesChange
+      // (dimensions event) once React Flow measures the actual size.
+      let estW = 180, estH = 160;
       if (kind === 'zone') {
         const z = zoneByKey[value];
-        if (z) { width = z.defaultWidth; height = z.defaultHeight; }
+        if (z) { estW = z.defaultWidth; estH = z.defaultHeight; }
       } else if (kind === 'annotation') {
-        width = 220; height = 80;
+        estW = 220; estH = 80;
       }
-
-      // Centre on cursor, then snap to the 10 px grid.
       const snap = (v) => Math.round(v / 10) * 10;
-      const position = {
-        x: snap(cursor.x - width  / 2),
-        y: snap(cursor.y - height / 2),
-      };
+      const position = { x: snap(cursor.x - estW / 2), y: snap(cursor.y - estH / 2) };
+
+      const id = nextId();
+      // Record the intended cursor centre so onNodesChange can reposition
+      // this node once the real width / height are known.
+      pendingDropRef.current.set(id, { cx: cursor.x, cy: cursor.y });
 
       if (kind === 'device') {
         const d = deviceByKey[value];
-        if (!d) return;
-        // If the drop point is inside a zone, parent the device to that zone
-        // and make the position relative to the zone's top-left.
+        if (!d) { pendingDropRef.current.delete(id); return; }
         const parent = findContainingZone(nodes, { x: cursor.x, y: cursor.y });
         const relPos = parent
           ? { x: position.x - parent.position.x, y: position.y - parent.position.y }
           : position;
 
         setNodes((nds) => nds.concat({
-          id: nextId(),
+          id,
           type: 'device',
           position: relPos,
           ...(parent ? { parentNode: parent.id } : {}),
@@ -211,10 +243,10 @@ function Editor({ me }) {
         }));
       } else if (kind === 'zone') {
         const z = zoneByKey[value];
-        if (!z) return;
+        if (!z) { pendingDropRef.current.delete(id); return; }
         setNodes((nds) => [
           {
-            id: nextId(),
+            id,
             type: 'zone',
             position,
             style: { width: z.defaultWidth, height: z.defaultHeight },
@@ -225,7 +257,7 @@ function Editor({ me }) {
         ]);
       } else if (kind === 'annotation') {
         setNodes((nds) => nds.concat({
-          id: nextId(),
+          id,
           type: 'annotation',
           position,
           style: { width: 220, height: 80 },
@@ -450,9 +482,11 @@ function Editor({ me }) {
           type="button"
           className="btn secondary theme-btn"
           onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
-          title={theme === 'light' ? 'Switch to dark theme' : 'Switch to light theme'}
+          title={theme === 'light' ? 'Switch to Dark theme' : 'Switch to Light theme'}
           aria-label="Toggle theme"
-        >{theme === 'light' ? '🌙' : '☀︎'}</button>
+        >
+          {theme === 'light' ? <>☀︎ <span>Light</span></> : <>🌙 <span>Dark</span></>}
+        </button>
         <div className="view-switch" role="tablist" aria-label="View">
           <button
             type="button"
@@ -591,15 +625,6 @@ function Editor({ me }) {
                 : 'You can build and explore templates, but designs aren\'t saved. '}
               {!me && <a href="/login">Sign in</a>}
               {!me && ' to save.'}
-            </span>
-          </div>
-        )}
-        {canSave && summary.deviceCount > 0 && summary.inputCount === 0 && (
-          <div className="validation-banner" role="status">
-            <strong>⚠︎ No input boundary</strong>
-            <span>
-              Every design should have at least one <b>Input</b> boundary (drag one from the palette).
-              It's how readers see where traffic enters this site.
             </span>
           </div>
         )}

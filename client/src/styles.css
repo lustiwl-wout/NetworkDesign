@@ -1392,4 +1392,17 @@ html, body, #root {
   font-weight: 600;
 }
 
-.btn.small { padding: 4px 8px; font-size: 12px; }
+.btn.small {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 26px;
+  padding: 0 10px;
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+/* When multiple small buttons sit in a row-actions cell, keep them on a
+   single line without vertical stretching even if the row is tall. */
+.row-actions { gap: 6px; }
