@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { useStore, EdgeLabelRenderer, Position } from 'reactflow';
+import { useStore, useReactFlow, EdgeLabelRenderer, Position } from 'reactflow';
 
 // Custom orthogonal router. Built from scratch because every off-the-
 // shelf option we tried either produced diagonals at the endpoints or
@@ -130,6 +130,23 @@ export default function SmartEdge(props) {
   const centre = points[Math.floor(points.length / 2)];
   const totalLen = polylineLength(points);
 
+  const { screenToFlowPosition, setEdges } = useReactFlow();
+  const snap = (v) => Math.round(v / 10) * 10;
+  // Double-click on the path adds a new waypoint at the click. Inserts
+  // it after the waypoint whose slot it geographically belongs to, so
+  // multi-bend edges stay consistent.
+  const addWaypointAtEvent = (ev) => {
+    ev.stopPropagation();
+    const pt = screenToFlowPosition({ x: ev.clientX, y: ev.clientY });
+    const click = { x: snap(pt.x), y: snap(pt.y) };
+    setEdges((eds) => eds.map((e) => {
+      if (e.id !== id) return e;
+      const wps = [...(e.data?.waypoints ?? [])];
+      wps.push(click);
+      return { ...e, data: { ...(e.data ?? {}), waypoints: wps } };
+    }));
+  };
+
   return (
     <>
       <path
@@ -141,6 +158,7 @@ export default function SmartEdge(props) {
         className={`react-flow__edge-path${animated ? ' animated' : ''}`}
         style={style}
         markerEnd={markerEnd}
+        onDoubleClick={addWaypointAtEvent}
       />
       {label && (
         <EdgeLabelRenderer>
@@ -158,8 +176,63 @@ export default function SmartEdge(props) {
           </div>
         </EdgeLabelRenderer>
       )}
+      {selected && (
+        <EdgeLabelRenderer>
+          <WaypointHandles
+            edgeId={id}
+            waypoints={waypoints}
+          />
+        </EdgeLabelRenderer>
+      )}
     </>
   );
+}
+
+function WaypointHandles({ edgeId, waypoints }) {
+  const { screenToFlowPosition, setEdges } = useReactFlow();
+  const snap = (v) => Math.round(v / 10) * 10;
+
+  const update = (i, point) => {
+    setEdges((eds) => eds.map((e) => {
+      if (e.id !== edgeId) return e;
+      const wps = [...(e.data?.waypoints ?? [])];
+      wps[i] = point;
+      return { ...e, data: { ...(e.data ?? {}), waypoints: wps } };
+    }));
+  };
+  const remove = (i) => {
+    setEdges((eds) => eds.map((e) => {
+      if (e.id !== edgeId) return e;
+      const wps = (e.data?.waypoints ?? []).filter((_, j) => j !== i);
+      return { ...e, data: { ...(e.data ?? {}), waypoints: wps } };
+    }));
+  };
+
+  const startDrag = (e, i) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const move = (ev) => {
+      const pt = screenToFlowPosition({ x: ev.clientX, y: ev.clientY });
+      update(i, { x: snap(pt.x), y: snap(pt.y) });
+    };
+    const up = () => {
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', up);
+    };
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
+  };
+
+  return waypoints.map((p, i) => (
+    <div
+      key={i}
+      className="edge-waypoint"
+      style={{ transform: `translate(-50%, -50%) translate(${p.x}px, ${p.y}px)` }}
+      onMouseDown={(e) => startDrag(e, i)}
+      onDoubleClick={(e) => { e.stopPropagation(); remove(i); }}
+      title="Drag to move · double-click to remove"
+    />
+  ));
 }
 
 function polylineLength(points) {

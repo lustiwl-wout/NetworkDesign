@@ -1455,6 +1455,26 @@ html, body, #root {
   transform: none;
   background: var(--bg);
 }
+/* Draggable waypoint dot shown on a selected edge. Drag to move the
+   bend; double-click to remove it. */
+.edge-waypoint {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--text);
+  pointer-events: all;
+  cursor: grab;
+  z-index: 30;
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.25);
+}
+.edge-waypoint:active { cursor: grabbing; }
+.edge-waypoint:hover { box-shadow: 0 0 0 5px rgba(56, 189, 248, 0.35); }
+/* Hide during presentation / export. */
+.app.presenting .edge-waypoint,
+.exporting .edge-waypoint { display: none !important; }
+
 .wp-row {
   display: grid;
   grid-template-columns: 28px 1fr 1fr 32px;
