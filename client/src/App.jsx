@@ -21,7 +21,12 @@ import ProfilePage from './ProfilePage.jsx';
 import { api } from './api.js';
 import { deviceTypesApi, zoneTypesApi, edgeKindsApi } from './catalogApi.js';
 import { authApi } from './authApi.js';
-import { EDGE_KINDS, EDGE_KINDS_BY_KEY, applyKind, setEdgeKinds } from './edgePresets.js';
+import {
+  applyKind,
+  getEdgeKinds,
+  getEdgeKind,
+  setEdgeKinds as setEdgeKindsModule,
+} from './edgePresets.js';
 import { exportCanvasPng } from './exportImage.js';
 
 const nodeTypes = { device: NetworkNode, zone: ZoneNode, annotation: AnnotationNode };
@@ -96,6 +101,7 @@ function Editor({ me }) {
   }, [onNodesChangeRaw, setNodes]);
   const [deviceTypes, setDeviceTypes] = useState([]);
   const [zoneTypes, setZoneTypes] = useState([]);
+  const [edgeKinds, setEdgeKindsState] = useState(getEdgeKinds());
   const [currentId, setCurrentId] = useState(null);
   const [name, setName] = useState('Untitled design');
   const [selectedNode, setSelectedNode] = useState(null);
@@ -119,7 +125,10 @@ function Editor({ me }) {
       ]);
       setDeviceTypes(d);
       setZoneTypes(z);
-      setEdgeKinds(k);
+      if (Array.isArray(k) && k.length) {
+        setEdgeKindsModule(k);   // updates module-level store so applyKind sees it
+        setEdgeKindsState(k);     // triggers React re-render for the inspector
+      }
     } catch (e) { console.error('Failed to load catalogs', e); }
   }, []);
 
@@ -656,6 +665,7 @@ function Editor({ me }) {
               <EdgeInspector
                 edge={selectedEdge}
                 view={view}
+                edgeKinds={edgeKinds}
                 onChange={updateSelectedEdge}
                 onKindChange={changeEdgeKind}
                 onDelete={deleteSelected}
@@ -914,9 +924,9 @@ function AnnotationInspector({ node, onChange, onDelete }) {
   );
 }
 
-function EdgeInspector({ edge, view = 'management', onChange, onKindChange, onDelete }) {
+function EdgeInspector({ edge, view = 'management', edgeKinds = [], onChange, onKindChange, onDelete }) {
   const kindKey = edge.data?.kind ?? 'network';
-  const kind = EDGE_KINDS_BY_KEY[kindKey] ?? EDGE_KINDS_BY_KEY.network ?? { description: '', stroke: '#94a3b8' };
+  const kind = getEdgeKind(kindKey);
   const engineer = view === 'engineering';
   const d = edge.data ?? {};
   const setData = (patch) => onChange({ data: { ...d, ...patch } });
@@ -925,7 +935,7 @@ function EdgeInspector({ edge, view = 'management', onChange, onKindChange, onDe
       <h2>Connection</h2>
       <label>Connection kind</label>
       <select value={kindKey} onChange={(e) => onKindChange(e.target.value)}>
-        {EDGE_KINDS.map((k) => (
+        {edgeKinds.map((k) => (
           <option key={k.key} value={k.key}>{k.label}</option>
         ))}
       </select>

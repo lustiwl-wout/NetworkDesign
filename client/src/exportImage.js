@@ -1,7 +1,7 @@
 import { toPng } from 'html-to-image';
 import { getRectOfNodes, getTransformForBounds } from 'reactflow';
 import { ICON_META } from './DeviceIcons.jsx';
-import { EDGE_KINDS_BY_KEY } from './edgePresets.js';
+import { getEdgeKind } from './edgePresets.js';
 
 const PAD = 40;
 const TITLE_H = 72;
@@ -73,8 +73,8 @@ function collectLegend(nodes, edges, deviceTypes) {
     items.push({ kind: 'device', iconKey, label });
   }
   for (const kk of edgeKinds) {
-    const k = EDGE_KINDS_BY_KEY[kk] ?? EDGE_KINDS_BY_KEY.network;
-    items.push({ kind: 'edge', edgeKey: kk, label: k.label, stroke: k.style.stroke, dash: k.style.strokeDasharray, animated: k.animated });
+    const k = getEdgeKind(kk);
+    items.push({ kind: 'edge', edgeKey: kk, label: k.label, stroke: k.stroke, dash: k.strokeDasharray, animated: k.animated });
   }
   return { items };
 }

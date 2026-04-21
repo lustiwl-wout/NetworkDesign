@@ -21,7 +21,7 @@ const STUB         = 30; // length of the perpendicular stub from each anchor
 const selectNodes = (s) => s.nodeInternals;
 
 export default function SmartEdge(props) {
-  const { id, source, target, style = {}, markerEnd, label, animated } = props;
+  const { id, source, target, style = {}, markerEnd, label, animated, selected } = props;
   const nodeInternals = useStore(selectNodes);
   const sourceNode = nodeInternals.get(source);
   const targetNode = nodeInternals.get(target);
@@ -87,6 +87,7 @@ export default function SmartEdge(props) {
   const d = polyline(points);
 
   const centre = points[Math.floor(points.length / 2)];
+  const totalLen = polylineLength(points);
 
   return (
     <>
@@ -108,8 +109,24 @@ export default function SmartEdge(props) {
           </div>
         </EdgeLabelRenderer>
       )}
+      {selected && (
+        <EdgeLabelRenderer>
+          <div className="edge-size-chip"
+            style={{ transform: `translate(-50%, -50%) translate(${centre.x}px, ${centre.y + 16}px)` }}>
+            {Math.round(totalLen)} px
+          </div>
+        </EdgeLabelRenderer>
+      )}
     </>
   );
+}
+
+function polylineLength(points) {
+  let total = 0;
+  for (let i = 1; i < points.length; i++) {
+    total += Math.abs(points[i].x - points[i - 1].x) + Math.abs(points[i].y - points[i - 1].y);
+  }
+  return total;
 }
 
 // ---- Geometry ----

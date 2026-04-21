@@ -20,12 +20,14 @@ export function setEdgeKinds(kinds) {
   _byKey = Object.fromEntries(kinds.map((k) => [k.key, k]));
 }
 
-export function getEdgeKinds()         { return _kinds; }
-export function getEdgeKind(key)       { return _byKey[key] ?? _byKey.network ?? FALLBACK[0]; }
-
-// For JSX consumers (import as constant once; reads are stable within a render)
-export const EDGE_KINDS         = new Proxy([], { get: (_, p) => Reflect.get(_kinds, p) });
-export const EDGE_KINDS_BY_KEY  = new Proxy({}, { get: (_, p) => Reflect.get(_byKey, p) });
+// Plain getters — prefer these over a Proxy in JSX: the module stays a
+// regular object, no engine-specific weirdness with Array.prototype on
+// a Proxy target.
+export function getEdgeKinds() { return _kinds; }
+export function getEdgeKind(key) {
+  return _byKey[key] ?? _byKey.network ?? FALLBACK[0];
+}
+export const EDGE_FALLBACK = FALLBACK;
 
 function styleFromKind(k) {
   const style = { stroke: k.stroke, strokeWidth: k.strokeWidth ?? 2 };

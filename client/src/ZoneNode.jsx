@@ -1,13 +1,10 @@
+import { useLayoutEffect, useRef, useState } from 'react';
 import { NodeResizer } from '@reactflow/node-resizer';
 import { Handle, Position } from 'reactflow';
 import '@reactflow/node-resizer/dist/style.css';
 
 const DEFAULT_COLOR = '#38bdf8';
 
-// Four anchor points on the zone's perimeter so network devices can
-// connect to the zone as a whole (edges route to whichever side of the
-// zone is closest). Workloads inside the zone don't need their own
-// external connections — the zone carries the traffic.
 const SIDES = [
   { id: 't', pos: Position.Top },
   { id: 'r', pos: Position.Right },
@@ -18,9 +15,22 @@ const SIDES = [
 export default function ZoneNode({ data, selected }) {
   const color = data?.color ?? DEFAULT_COLOR;
   const label = data?.label ?? 'Zone';
+  const ref = useRef(null);
+  const [size, setSize] = useState({ w: 0, h: 0 });
+
+  useLayoutEffect(() => {
+    if (!ref.current) return;
+    const el = ref.current;
+    const update = () => setSize({ w: el.offsetWidth, h: el.offsetHeight });
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   return (
     <div
+      ref={ref}
       className={`zone-node${selected ? ' selected' : ''}`}
       style={{
         borderColor: color,
@@ -52,6 +62,12 @@ export default function ZoneNode({ data, selected }) {
         <span className="zone-title">{label}</span>
         {data?.sublabel && <span className="zone-sub">{data.sublabel}</span>}
       </div>
+
+      {selected && size.w > 0 && (
+        <div className="size-chip size-chip--zone" style={{ borderColor: color, color }}>
+          {Math.round(size.w)} × {Math.round(size.h)}
+        </div>
+      )}
     </div>
   );
 }
