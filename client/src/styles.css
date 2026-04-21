@@ -504,9 +504,15 @@ html, body, #root {
   display: none !important;
 }
 
-/* Hide NodeResizer's MID-SIDE handles — they overlap our connection
-   anchors. Corners still resize the zone. */
-.zone-node .react-flow__resize-control.line { display: none !important; }
+/* Zones resize from the bottom-right corner only. Mid-side line
+   handles overlap our connection anchors; top-left / top-right /
+   bottom-left corners are redundant. */
+.zone-node .react-flow__resize-control.line,
+.zone-node .react-flow__resize-control.top-left,
+.zone-node .react-flow__resize-control.top-right,
+.zone-node .react-flow__resize-control.bottom-left {
+  display: none !important;
+}
 .zone-node:hover .zone-handle { opacity: 0.45; }
 .zone-node.selected .zone-handle { opacity: 0.9; }
 

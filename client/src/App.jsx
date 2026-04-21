@@ -1019,11 +1019,13 @@ function WaypointEditor({ edge, onChange }) {
   return (
     <>
       <label>Waypoints (route control)</label>
+      <p className="hint small">
+        <b>Double-click the line</b> on the canvas to add a bend, then
+        drag the dot to steer. Double-click a dot to remove it. X and Y
+        snap to the 10 px grid.
+      </p>
       {wps.length === 0 && (
-        <p className="hint small">
-          No waypoints — the line auto-routes. Add one to force the
-          path through a specific point.
-        </p>
+        <p className="hint small">No waypoints — the line auto-routes.</p>
       )}
       {wps.map((p, i) => (
         <div key={i} className="wp-row">

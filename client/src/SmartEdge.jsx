@@ -149,6 +149,18 @@ export default function SmartEdge(props) {
 
   return (
     <>
+      {/* Wide invisible hit area. React Flow's default edges use a
+          separate interaction path because a 2 px stroke is hard to
+          click. Double-click here to add a waypoint; drag waypoint
+          dots (appear on selection) to move bends. */}
+      <path
+        d={d}
+        fill="none"
+        stroke="transparent"
+        strokeWidth="20"
+        style={{ pointerEvents: 'stroke', cursor: 'pointer' }}
+        onDoubleClick={addWaypointAtEvent}
+      />
       <path
         id={id}
         d={d}
@@ -156,9 +168,8 @@ export default function SmartEdge(props) {
         strokeLinejoin="miter"
         strokeLinecap="butt"
         className={`react-flow__edge-path${animated ? ' animated' : ''}`}
-        style={style}
+        style={{ ...style, pointerEvents: 'none' }}
         markerEnd={markerEnd}
-        onDoubleClick={addWaypointAtEvent}
       />
       {label && (
         <EdgeLabelRenderer>
