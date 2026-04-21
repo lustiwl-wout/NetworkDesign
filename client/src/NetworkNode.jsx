@@ -8,12 +8,22 @@ const RISK_COLORS = {
   high: '#ef4444',
 };
 
+// Side definitions: which React Flow Position each belongs to, and
+// which axis the handle is distributed along. 'along' is the dimension
+// that we divide into N slots; 'perp' is where the handle sits on the
+// other axis (0% = far edge, 100% = near edge, but React Flow handles
+// this by Position).
 const SIDES = [
-  { id: 't', pos: Position.Top },
-  { id: 'r', pos: Position.Right },
-  { id: 'b', pos: Position.Bottom },
-  { id: 'l', pos: Position.Left },
+  { key: 't', pos: Position.Top,    along: 'left'  },
+  { key: 'r', pos: Position.Right,  along: 'top'   },
+  { key: 'b', pos: Position.Bottom, along: 'left'  },
+  { key: 'l', pos: Position.Left,   along: 'top'   },
 ];
+
+function sideCount(data, sideKey) {
+  const n = data?.handles?.[sideKey];
+  return Number.isFinite(n) && n > 0 ? Math.min(Math.floor(n), 12) : 1;
+}
 
 export default function NetworkNode({ data, selected }) {
   const iconKey = data?.iconKey ?? 'generic';
@@ -49,17 +59,25 @@ export default function NetworkNode({ data, selected }) {
         </span>
       )}
 
-      {SIDES.map((s) => (
-        <Handle
-          key={s.id}
-          id={s.id}
-          type="source"
-          position={s.pos}
-          className="port-handle"
-          style={{ background: accent, borderColor: '#e2e8f0' }}
-          isConnectable
-        />
-      ))}
+      {SIDES.map(({ key, pos, along }) => {
+        const n = sideCount(data, key);
+        return Array.from({ length: n }, (_, i) => {
+          const pct = ((i + 1) / (n + 1)) * 100;
+          const handleStyle = { background: accent, borderColor: '#e2e8f0' };
+          handleStyle[along] = `${pct}%`;
+          return (
+            <Handle
+              key={`${key}-${i}`}
+              id={`${key}-${i}`}
+              type="source"
+              position={pos}
+              className="port-handle"
+              style={handleStyle}
+              isConnectable
+            />
+          );
+        });
+      })}
 
       <div className="icon-wrap"><DeviceIcon iconKey={iconKey} size={72} /></div>
       <div className="label">{data?.label ?? 'Device'}</div>

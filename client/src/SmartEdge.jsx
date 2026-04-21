@@ -21,7 +21,10 @@ const STUB         = 30; // length of the perpendicular stub from each anchor
 const selectNodes = (s) => s.nodeInternals;
 
 export default function SmartEdge(props) {
-  const { id, source, target, style = {}, markerEnd, label, animated, selected } = props;
+  const {
+    id, source, target, sourceHandle, targetHandle,
+    style = {}, markerEnd, label, animated, selected,
+  } = props;
   const nodeInternals = useStore(selectNodes);
   const sourceNode = nodeInternals.get(source);
   const targetNode = nodeInternals.get(target);
@@ -67,8 +70,14 @@ export default function SmartEdge(props) {
   // Anchors + stubs — every coordinate is quantised to the grid so the
   // first and last segments can never become micro-diagonals when the
   // node's side midpoint falls between grid cells.
-  const sa = snapAnchor(getSideAnchor(sourceNode, targetNode));
-  const ta = snapAnchor(getSideAnchor(targetNode, sourceNode));
+  // If the edge was drawn from a specific handle, honour it; otherwise
+  // fall back to the floating side midpoint closest to the other node.
+  const sa = snapAnchor(
+    anchorFromHandle(sourceNode, sourceHandle) ?? getSideAnchor(sourceNode, targetNode)
+  );
+  const ta = snapAnchor(
+    anchorFromHandle(targetNode, targetHandle) ?? getSideAnchor(targetNode, sourceNode)
+  );
   const ss = stubOut(sa);
   const ts = stubOut(ta);
 
@@ -130,6 +139,30 @@ function polylineLength(points) {
 }
 
 // ---- Geometry ----
+
+// Decode a handle id of the form "s-i" where s ∈ {t,r,b,l} and i is
+// the zero-based index along that side. For a device with data.handles
+// = { top: 2, right: 3, … } the i-th handle on side s sits at
+// (i+1)/(n+1) along the perpendicular axis.
+function anchorFromHandle(node, handleId) {
+  if (!node || !handleId) return null;
+  const [side, idxStr] = handleId.split('-');
+  const idx = Number(idxStr);
+  if (!['t', 'r', 'b', 'l'].includes(side) || !Number.isFinite(idx)) return null;
+  const p = node.positionAbsolute ?? node.position;
+  const w = node.width ?? 170;
+  const h = node.height ?? 150;
+  const sideCount = Math.max(1, Number(node.data?.handles?.[side]) || 1);
+  const frac = (idx + 1) / (sideCount + 1);
+
+  switch (side) {
+    case 't': return { x: p.x + w * frac, y: p.y,         side: Position.Top };
+    case 'b': return { x: p.x + w * frac, y: p.y + h,     side: Position.Bottom };
+    case 'l': return { x: p.x,            y: p.y + h * frac, side: Position.Left };
+    case 'r': return { x: p.x + w,        y: p.y + h * frac, side: Position.Right };
+    default:  return null;
+  }
+}
 
 function getSideAnchor(self, other) {
   const sp = self.positionAbsolute ?? self.position;

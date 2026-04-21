@@ -6,11 +6,16 @@ import '@reactflow/node-resizer/dist/style.css';
 const DEFAULT_COLOR = '#38bdf8';
 
 const SIDES = [
-  { id: 't', pos: Position.Top },
-  { id: 'r', pos: Position.Right },
-  { id: 'b', pos: Position.Bottom },
-  { id: 'l', pos: Position.Left },
+  { key: 't', pos: Position.Top,    along: 'left'  },
+  { key: 'r', pos: Position.Right,  along: 'top'   },
+  { key: 'b', pos: Position.Bottom, along: 'left'  },
+  { key: 'l', pos: Position.Left,   along: 'top'   },
 ];
+
+function sideCount(data, sideKey) {
+  const n = data?.handles?.[sideKey];
+  return Number.isFinite(n) && n > 0 ? Math.min(Math.floor(n), 12) : 1;
+}
 
 export default function ZoneNode({ data, selected }) {
   const color = data?.color ?? DEFAULT_COLOR;
@@ -46,17 +51,25 @@ export default function ZoneNode({ data, selected }) {
         handleStyle={{ background: color, width: 8, height: 8 }}
       />
 
-      {SIDES.map((s) => (
-        <Handle
-          key={s.id}
-          id={s.id}
-          type="source"
-          position={s.pos}
-          className="zone-handle"
-          style={{ background: color, borderColor: '#e2e8f0' }}
-          isConnectable
-        />
-      ))}
+      {SIDES.map(({ key, pos, along }) => {
+        const n = sideCount(data, key);
+        return Array.from({ length: n }, (_, i) => {
+          const pct = ((i + 1) / (n + 1)) * 100;
+          const handleStyle = { background: color, borderColor: '#e2e8f0' };
+          handleStyle[along] = `${pct}%`;
+          return (
+            <Handle
+              key={`${key}-${i}`}
+              id={`${key}-${i}`}
+              type="source"
+              position={pos}
+              className="zone-handle"
+              style={handleStyle}
+              isConnectable
+            />
+          );
+        });
+      })}
 
       <div className="zone-header" style={{ color, borderColor: color }}>
         <span className="zone-title">{label}</span>

@@ -182,13 +182,17 @@ function Editor({ me }) {
   };
 
   const onConnect = useCallback((params) => {
-    // Floating edges: strip the specific handle the user dragged from /
-    // onto, so the edge re-anchors to the closest side instead of stuck
-    // on whichever anchor happened to be under the cursor.
+    // Preserve sourceHandle / targetHandle when the user drags from a
+    // specific handle, so they can attach multiple edges to separate
+    // anchors on the same side (e.g. OOB + Network link). When null
+    // (programmatic or drag from the card body), the edge falls back
+    // to the floating side-midpoint behaviour.
     const edge = applyKind({
       id: `e_${Date.now().toString(36)}_${tmpId++}`,
       source: params.source,
       target: params.target,
+      sourceHandle: params.sourceHandle ?? null,
+      targetHandle: params.targetHandle ?? null,
       type: 'smart',
     }, 'network');
     setEdges((eds) => addEdge(edge, eds));
@@ -801,6 +805,8 @@ function NodeInspector({ node, view = 'management', allDesigns = [], currentId, 
         </>
       )}
 
+      <HandleCountRows data={d} onChange={onChange} />
+
       {engineer && (
         <>
           <hr className="form-divider" />
@@ -849,6 +855,47 @@ function NodeInspector({ node, view = 'management', allDesigns = [], currentId, 
   );
 }
 
+function HandleCountRows({ data, onChange }) {
+  const handles = data?.handles ?? {};
+  const setSide = (side, v) => {
+    const n = Math.max(1, Math.min(12, Number(v) || 1));
+    onChange({ handles: { ...handles, [side]: n } });
+  };
+  const val = (side) => handles[side] ?? 1;
+  return (
+    <>
+      <label>Connection points per side</label>
+      <div className="handle-grid">
+        <div>
+          <span>Top</span>
+          <input type="number" min="1" max="12" value={val('t')}
+            onChange={(e) => setSide('t', e.target.value)} />
+        </div>
+        <div>
+          <span>Right</span>
+          <input type="number" min="1" max="12" value={val('r')}
+            onChange={(e) => setSide('r', e.target.value)} />
+        </div>
+        <div>
+          <span>Bottom</span>
+          <input type="number" min="1" max="12" value={val('b')}
+            onChange={(e) => setSide('b', e.target.value)} />
+        </div>
+        <div>
+          <span>Left</span>
+          <input type="number" min="1" max="12" value={val('l')}
+            onChange={(e) => setSide('l', e.target.value)} />
+        </div>
+      </div>
+      <p className="hint small">
+        Add extra points to separate different traffic on the same side
+        (e.g. Network link + OOB). Edges drawn from a specific point
+        stay anchored there; edges drawn without a handle float.
+      </p>
+    </>
+  );
+}
+
 function ZoneInspector({ node, onChange, onDelete }) {
   const d = node.data ?? {};
   return (
@@ -869,6 +916,7 @@ function ZoneInspector({ node, onChange, onDelete }) {
         onChange={(e) => onChange({ color: e.target.value })}
       />
       <p className="hint">Drag the corner to resize. Zones sit behind devices.</p>
+      <HandleCountRows data={d} onChange={onChange} />
       <button className="btn danger" onClick={onDelete}>Delete zone</button>
     </>
   );
