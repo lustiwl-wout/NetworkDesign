@@ -1,6 +1,6 @@
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { NodeResizer } from '@reactflow/node-resizer';
-import { Handle, Position } from 'reactflow';
+import { Handle, Position, useUpdateNodeInternals } from 'reactflow';
 import '@reactflow/node-resizer/dist/style.css';
 
 const DEFAULT_COLOR = '#38bdf8';
@@ -22,11 +22,23 @@ function sideCount(data, sideKey) {
   return Math.max(0, Math.min(Math.floor(n), 12));
 }
 
-export default function ZoneNode({ data, selected }) {
+export default function ZoneNode({ id, data, selected }) {
   const color = data?.color ?? DEFAULT_COLOR;
   const label = data?.label ?? 'Zone';
   const ref = useRef(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
+  const updateNodeInternals = useUpdateNodeInternals();
+
+  // Re-measure handles whenever the per-side counts change.
+  const handlesKey = [
+    data?.handles?.t ?? 0,
+    data?.handles?.r ?? 0,
+    data?.handles?.b ?? 0,
+    data?.handles?.l ?? 0,
+  ].join(',');
+  useEffect(() => {
+    if (id) updateNodeInternals(id);
+  }, [id, handlesKey, updateNodeInternals]);
 
   useLayoutEffect(() => {
     if (!ref.current) return;

@@ -1,5 +1,5 @@
-import { useLayoutEffect, useRef, useState } from 'react';
-import { Handle, Position } from 'reactflow';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { Handle, Position, useUpdateNodeInternals } from 'reactflow';
 import DeviceIcon, { iconAccent } from './DeviceIcons.jsx';
 
 const RISK_COLORS = {
@@ -25,12 +25,27 @@ function sideCount(data, sideKey) {
   return Number.isFinite(n) && n > 0 ? Math.min(Math.floor(n), 12) : 1;
 }
 
-export default function NetworkNode({ data, selected }) {
+export default function NetworkNode({ id, data, selected }) {
   const iconKey = data?.iconKey ?? 'generic';
   const risk = data?.risk;
   const accent = iconAccent(iconKey);
   const ref = useRef(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
+  const updateNodeInternals = useUpdateNodeInternals();
+
+  // When handle counts change, force React Flow to re-measure this
+  // node's handles — otherwise the internal handle cache stays stuck
+  // at the count from mount, and newly added handles can't register
+  // as valid connection endpoints.
+  const handlesKey = [
+    data?.handles?.t ?? 1,
+    data?.handles?.r ?? 1,
+    data?.handles?.b ?? 1,
+    data?.handles?.l ?? 1,
+  ].join(',');
+  useEffect(() => {
+    if (id) updateNodeInternals(id);
+  }, [id, handlesKey, updateNodeInternals]);
 
   useLayoutEffect(() => {
     if (!ref.current) return;
