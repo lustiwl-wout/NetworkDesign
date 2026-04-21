@@ -48,8 +48,11 @@ export default function SmartEdge(props) {
 
   if (!sourceNode || !targetNode) return null;
 
-  const sa = getSideAnchor(sourceNode, targetNode);
-  const ta = getSideAnchor(targetNode, sourceNode);
+  // Anchors + stubs — every coordinate is quantised to the grid so the
+  // first and last segments can never become micro-diagonals when the
+  // node's side midpoint falls between grid cells.
+  const sa = snapAnchor(getSideAnchor(sourceNode, targetNode));
+  const ta = snapAnchor(getSideAnchor(targetNode, sourceNode));
   const ss = stubOut(sa);
   const ts = stubOut(ta);
 
@@ -75,6 +78,8 @@ export default function SmartEdge(props) {
         id={id}
         d={d}
         fill="none"
+        strokeLinejoin="miter"
+        strokeLinecap="butt"
         className={`react-flow__edge-path${animated ? ' animated' : ''}`}
         style={style}
         markerEnd={markerEnd}
@@ -113,6 +118,10 @@ function getSideAnchor(self, other) {
   return dy >= 0
     ? { x: scx, y: sp.y + h, side: Position.Bottom }
     : { x: scx, y: sp.y,     side: Position.Top };
+}
+
+function snapAnchor(a) {
+  return { x: quant(a.x), y: quant(a.y), side: a.side };
 }
 
 function stubOut(a) {
