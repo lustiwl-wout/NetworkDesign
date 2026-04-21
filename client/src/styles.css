@@ -476,6 +476,15 @@ html, body, #root {
   transition: opacity 0.12s;
 }
 .zone-handle:hover { opacity: 1 !important; }
+
+/* Hide NodeResizer's MID-SIDE handles (the 4 line handles between
+   corners). They sit exactly where our connection anchors at frac
+   0.5 would, so clicks were going to the resize control instead of
+   the handle. Corners stay; corners are all you need to resize. */
+.zone-node .react-flow__resize-control.line { display: none !important; }
+/* Handles always on top of any remaining resize control, so drag
+   starts always land on the connection anchor. */
+.zone-handle { z-index: 10 !important; }
 .zone-node:hover .zone-handle { opacity: 0.45; }
 .zone-node.selected .zone-handle { opacity: 0.9; }
 

@@ -22,9 +22,16 @@ const selectNodes = (s) => s.nodeInternals;
 
 export default function SmartEdge(props) {
   const {
-    id, source, target, sourceHandle, targetHandle,
+    id, source, target,
+    // React Flow v11 passes handle IDs as sourceHandleId / targetHandleId
+    // on edge components. The edge *record* uses sourceHandle /
+    // targetHandle — we support both for safety.
+    sourceHandleId, targetHandleId,
+    sourceHandle, targetHandle,
     style = {}, markerEnd, label, animated, selected,
   } = props;
+  const srcHandle = sourceHandleId ?? sourceHandle ?? null;
+  const tgtHandle = targetHandleId ?? targetHandle ?? null;
   const nodeInternals = useStore(selectNodes);
   const sourceNode = nodeInternals.get(source);
   const targetNode = nodeInternals.get(target);
@@ -73,10 +80,10 @@ export default function SmartEdge(props) {
   // If the edge was drawn from a specific handle, honour it; otherwise
   // fall back to the floating side midpoint closest to the other node.
   const sa = snapAnchor(
-    anchorFromHandle(sourceNode, sourceHandle) ?? getSideAnchor(sourceNode, targetNode)
+    anchorFromHandle(sourceNode, srcHandle) ?? getSideAnchor(sourceNode, targetNode)
   );
   const ta = snapAnchor(
-    anchorFromHandle(targetNode, targetHandle) ?? getSideAnchor(targetNode, sourceNode)
+    anchorFromHandle(targetNode, tgtHandle) ?? getSideAnchor(targetNode, sourceNode)
   );
   const ss = stubOut(sa);
   const ts = stubOut(ta);
