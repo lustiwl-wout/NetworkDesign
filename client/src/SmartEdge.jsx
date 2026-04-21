@@ -79,12 +79,13 @@ export default function SmartEdge(props) {
   // node's side midpoint falls between grid cells.
   // If the edge was drawn from a specific handle, honour it; otherwise
   // fall back to the floating side midpoint closest to the other node.
-  const sa = snapAnchor(
-    anchorFromHandle(sourceNode, srcHandle) ?? getSideAnchor(sourceNode, targetNode)
-  );
-  const ta = snapAnchor(
-    anchorFromHandle(targetNode, tgtHandle) ?? getSideAnchor(targetNode, sourceNode)
-  );
+  // Handle-anchored endpoints are authoritative — don't snap or we
+  // land a few pixels off the visible handle. Floating anchors still
+  // snap, so lines stay clean against the grid.
+  const saHandle = anchorFromHandle(sourceNode, srcHandle);
+  const taHandle = anchorFromHandle(targetNode, tgtHandle);
+  const sa = saHandle ?? snapAnchor(getSideAnchor(sourceNode, targetNode));
+  const ta = taHandle ?? snapAnchor(getSideAnchor(targetNode, sourceNode));
   const ss = stubOut(sa);
   const ts = stubOut(ta);
 
