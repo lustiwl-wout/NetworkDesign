@@ -927,6 +927,9 @@ function AnnotationInspector({ node, onChange, onDelete }) {
 function EdgeInspector({ edge, view = 'management', edgeKinds = [], onChange, onKindChange, onDelete }) {
   const kindKey = edge.data?.kind ?? 'network';
   const kind = getEdgeKind(kindKey);
+  // Defensive fallback: if the prop is empty for any reason, read the
+  // module's current kinds so the dropdown is never empty.
+  const kinds = edgeKinds.length ? edgeKinds : getEdgeKinds();
   const engineer = view === 'engineering';
   const d = edge.data ?? {};
   const setData = (patch) => onChange({ data: { ...d, ...patch } });
@@ -935,7 +938,7 @@ function EdgeInspector({ edge, view = 'management', edgeKinds = [], onChange, on
       <h2>Connection</h2>
       <label>Connection kind</label>
       <select value={kindKey} onChange={(e) => onKindChange(e.target.value)}>
-        {edgeKinds.map((k) => (
+        {kinds.map((k) => (
           <option key={k.key} value={k.key}>{k.label}</option>
         ))}
       </select>

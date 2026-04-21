@@ -1255,17 +1255,15 @@ html, body, #root {
   overflow: auto;
   padding: 20px;
 }
+/* Flex layout avoids the 2-column grid reserving space when no form is
+   open. When the form is rendered it gets a fixed 420 px width. */
 .admin-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 420px;
+  display: flex;
+  align-items: flex-start;
   gap: 20px;
-  align-items: start;
 }
-/* When no form is open (single child), drop the second column so the
-   list doesn't get stretched across an empty panel-width. */
-.admin-grid:has(> :only-child) {
-  grid-template-columns: 1fr;
-}
+.admin-list { flex: 1 1 auto; min-width: 0; }
+.admin-form { width: 420px; flex: none; }
 .admin-list {
   background: var(--panel);
   border: 1px solid var(--border);
@@ -1284,6 +1282,7 @@ html, body, #root {
   font-weight: 600;
 }
 .admin-list table { width: 100%; border-collapse: collapse; }
+.admin-list tbody tr { height: 44px; }
 .admin-list thead th {
   text-align: left;
   font-size: 11px;
