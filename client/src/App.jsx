@@ -163,19 +163,31 @@ function Editor({ me }) {
       const raw = event.dataTransfer.getData('application/reactflow');
       if (!raw) return;
       const { kind, value } = JSON.parse(raw);
-      const rawPos = screenToFlowPosition({ x: event.clientX, y: event.clientY });
-      // Snap programmatic drops to the same 10 px grid React Flow uses
-      // for drag. Keeps every node aligned so edges can always route
-      // orthogonally with side midpoints landing on the grid.
-      const position = { x: Math.round(rawPos.x / 10) * 10, y: Math.round(rawPos.y / 10) * 10 };
+      const cursor = screenToFlowPosition({ x: event.clientX, y: event.clientY });
+
+      // Figure out the intended size of the node being dropped so we can
+      // centre it on the cursor (React Flow positions by top-left).
+      let width = 180, height = 160; // device default
+      if (kind === 'zone') {
+        const z = zoneByKey[value];
+        if (z) { width = z.defaultWidth; height = z.defaultHeight; }
+      } else if (kind === 'annotation') {
+        width = 220; height = 80;
+      }
+
+      // Centre on cursor, then snap to the 10 px grid.
+      const snap = (v) => Math.round(v / 10) * 10;
+      const position = {
+        x: snap(cursor.x - width  / 2),
+        y: snap(cursor.y - height / 2),
+      };
 
       if (kind === 'device') {
         const d = deviceByKey[value];
         if (!d) return;
         // If the drop point is inside a zone, parent the device to that zone
-        // and make the position relative to the zone's top-left. extent:
-        // 'parent' then prevents it from being dragged outside.
-        const parent = findContainingZone(nodes, position);
+        // and make the position relative to the zone's top-left.
+        const parent = findContainingZone(nodes, { x: cursor.x, y: cursor.y });
         const relPos = parent
           ? { x: position.x - parent.position.x, y: position.y - parent.position.y }
           : position;
