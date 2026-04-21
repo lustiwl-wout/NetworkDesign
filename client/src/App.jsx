@@ -108,6 +108,8 @@ function Editor({ me }) {
   const [selectedEdge, setSelectedEdge] = useState(null);
   const [toast, setToast] = useState(null);
   const [present, setPresent] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportLegend, setExportLegend] = useState(true);
   const [phaseFilter, setPhaseFilter] = useState(null); // null = show all
   const [view, setView] = useState(me?.defaultView ?? 'management'); // 'management' | 'engineering'
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -387,9 +389,9 @@ function Editor({ me }) {
     } catch (e) { flash(`Delete failed: ${e.message}`); }
   };
 
-  const exportPng = async () => {
+  const exportPng = async ({ includeLegend }) => {
     try {
-      await exportCanvasPng({ nodes, edges, title: name });
+      await exportCanvasPng({ nodes, edges, title: name, includeLegend });
       flash('Exported PNG');
     } catch (e) { flash(`Export failed: ${e.message}`); }
   };
@@ -526,7 +528,32 @@ function Editor({ me }) {
             History
           </button>
         )}
-        <button className="btn secondary" onClick={exportPng}>Export PNG</button>
+        <div className="menu">
+          <button className="btn secondary" onClick={() => setExportOpen((v) => !v)}>
+            Export PNG ▾
+          </button>
+          {exportOpen && (
+            <div className="menu-pop" style={{ minWidth: 240 }} onMouseDown={(e) => e.stopPropagation()}>
+              <label className="toggle-row" style={{ padding: '8px 10px' }}>
+                <input
+                  type="checkbox"
+                  checked={exportLegend}
+                  onChange={(e) => setExportLegend(e.target.checked)}
+                />
+                Include connection legend
+              </label>
+              <button
+                className="menu-item"
+                onClick={() => { setExportOpen(false); exportPng({ includeLegend: exportLegend }); }}
+              >
+                <div className="menu-item-title">Export</div>
+                <div className="menu-item-desc">
+                  {exportLegend ? 'Diagram + legend of connection kinds used.' : 'Diagram only, no legend.'}
+                </div>
+              </button>
+            </div>
+          )}
+        </div>
         <button className="btn secondary" onClick={() => setPresent(true)} title="Enter presentation mode (Esc to exit)">
           ▶ Present
         </button>
@@ -608,7 +635,7 @@ function Editor({ me }) {
           onNodeClick={(_, node) => { setSelectedNode(node); setSelectedEdge(null); }}
           onEdgeClick={(_, edge) => { setSelectedEdge(edge); setSelectedNode(null); }}
           onNodeDragStop={onNodeDragStop}
-          onPaneClick={() => { setSelectedNode(null); setSelectedEdge(null); }}
+          onPaneClick={() => { setSelectedNode(null); setSelectedEdge(null); setExportOpen(false); }}
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
           connectionMode="loose"

@@ -14,7 +14,7 @@ function currentPalette() {
     : { light, bg: '#0f172a', legendBg: '#141e33', text: '#e2e8f0', muted: '#94a3b8' };
 }
 
-export async function exportCanvasPng({ nodes, edges = [], title = 'Network Design' }) {
+export async function exportCanvasPng({ nodes, edges = [], title = 'Network Design', includeLegend = true }) {
   const viewport = document.querySelector('.react-flow__viewport');
   if (!viewport) throw new Error('Canvas not found');
   if (!nodes.length) throw new Error('Nothing to export');
@@ -22,7 +22,7 @@ export async function exportCanvasPng({ nodes, edges = [], title = 'Network Desi
   const palette = currentPalette();
   const bounds = getRectOfNodes(nodes);
 
-  const legendItems = collectLegend(edges);
+  const legendItems = includeLegend ? collectLegend(edges) : [];
   const legendCols = Math.max(1, Math.min(4, Math.ceil(legendItems.length / 6)));
   const legendRows = Math.ceil(legendItems.length / legendCols);
   const legendH = legendItems.length ? (legendRows * LEGEND_ROW_H + 36) : 0;
