@@ -68,6 +68,17 @@ CREATE TABLE IF NOT EXISTS device_types (
   updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS access_log (
+  id          SERIAL PRIMARY KEY,
+  ip          TEXT,
+  user_agent  TEXT,
+  user_id     INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  email       TEXT,
+  path        TEXT,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS access_log_time_idx ON access_log (created_at DESC);
+
 CREATE TABLE IF NOT EXISTS edge_kinds (
   id                SERIAL PRIMARY KEY,
   key               TEXT NOT NULL UNIQUE,

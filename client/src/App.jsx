@@ -1068,6 +1068,17 @@ function Root() {
 
   useEffect(() => { refreshMe(); }, [refreshMe]);
 
+  // Record a visit once per page load — fire-and-forget, errors are
+  // intentionally silenced.
+  useEffect(() => {
+    fetch('/api/visits', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: window.location.pathname }),
+    }).catch(() => {});
+  }, []);
+
   if (me === undefined) {
     return <div className="auth-shell"><div className="hint">Loading…</div></div>;
   }

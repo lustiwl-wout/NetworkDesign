@@ -44,6 +44,23 @@ async function adminReq(path, options = {}) {
   return res.json();
 }
 
+async function visitsReq(path, options = {}) {
+  const res = await fetch(`/api/admin/visits${path}`, {
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    ...options,
+  });
+  if (!res.ok) {
+    let body; try { body = await res.json(); } catch { body = { error: res.statusText }; }
+    throw new Error(body.error || `HTTP ${res.status}`);
+  }
+  if (res.status === 204) return null;
+  return res.json();
+}
+export const visitsAdminApi = {
+  list: () => visitsReq(''),
+};
+
 export const usersAdminApi = {
   list:   ()              => adminReq(''),
   create: (body)          => adminReq('', { method: 'POST', body: JSON.stringify(body) }),
