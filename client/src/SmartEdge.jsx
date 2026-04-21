@@ -160,6 +160,9 @@ function polylineLength(points) {
 // the zero-based index along that side. For a device with data.handles
 // = { top: 2, right: 3, … } the i-th handle on side s sits at
 // (i+1)/(n+1) along the perpendicular axis.
+// Handle positions are rendered in grid-aligned px (see NetworkNode /
+// ZoneNode). Mirror the formula exactly so the edge endpoint lands on
+// the same pixel as the visible handle dot.
 function anchorFromHandle(node, handleId) {
   if (!node || !handleId) return null;
   const [side, idxStr] = handleId.split('-');
@@ -169,13 +172,15 @@ function anchorFromHandle(node, handleId) {
   const w = node.width ?? 170;
   const h = node.height ?? 150;
   const sideCount = Math.max(1, Number(node.data?.handles?.[side]) || 1);
-  const frac = (idx + 1) / (sideCount + 1);
+  const snapPx = (v) => Math.round(v / 10) * 10;
+  const along_px_h = snapPx((w * (idx + 1)) / (sideCount + 1));
+  const along_px_v = snapPx((h * (idx + 1)) / (sideCount + 1));
 
   switch (side) {
-    case 't': return { x: p.x + w * frac, y: p.y,         side: Position.Top };
-    case 'b': return { x: p.x + w * frac, y: p.y + h,     side: Position.Bottom };
-    case 'l': return { x: p.x,            y: p.y + h * frac, side: Position.Left };
-    case 'r': return { x: p.x + w,        y: p.y + h * frac, side: Position.Right };
+    case 't': return { x: p.x + along_px_h, y: p.y,       side: Position.Top };
+    case 'b': return { x: p.x + along_px_h, y: p.y + h,   side: Position.Bottom };
+    case 'l': return { x: p.x,              y: p.y + along_px_v, side: Position.Left };
+    case 'r': return { x: p.x + w,          y: p.y + along_px_v, side: Position.Right };
     default:  return null;
   }
 }
@@ -206,17 +211,16 @@ function snapAnchor(a) {
   return { x: quant(a.x), y: quant(a.y), side: a.side };
 }
 
-// Perpendicular stub. Quantise the axis we're stepping along so the
-// stub tip lands on the grid (A* starts there), while keeping the
-// other axis pinned to the exact handle position. That way the first
-// segment (handle → stub tip) stays axis-aligned with the anchor, and
-// the next segment (stub tip → first grid cell) is also axis-aligned.
+// Perpendicular stub. Anchors are now grid-aligned both in the handle
+// render and the router's anchor math, and STUB is a multiple of the
+// grid, so every coordinate stays on the grid without extra quant
+// tricks here.
 function stubOut(a) {
   switch (a.side) {
-    case Position.Top:    return { x: a.x,             y: quant(a.y - STUB) };
-    case Position.Bottom: return { x: a.x,             y: quant(a.y + STUB) };
-    case Position.Left:   return { x: quant(a.x - STUB), y: a.y };
-    case Position.Right:  return { x: quant(a.x + STUB), y: a.y };
+    case Position.Top:    return { x: a.x, y: a.y - STUB };
+    case Position.Bottom: return { x: a.x, y: a.y + STUB };
+    case Position.Left:   return { x: a.x - STUB, y: a.y };
+    case Position.Right:  return { x: a.x + STUB, y: a.y };
     default:              return { x: a.x, y: a.y };
   }
 }

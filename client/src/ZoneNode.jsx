@@ -70,10 +70,13 @@ export default function ZoneNode({ id, data, selected }) {
 
       {SIDES.map(({ key, pos, along }) => {
         const n = sideCount(data, key);
+        const dim = along === 'left' ? (size.w || 200) : (size.h || 140);
         return Array.from({ length: n }, (_, i) => {
-          const pct = ((i + 1) / (n + 1)) * 100;
+          // Snap handle position to the 10 px grid so the visible
+          // handle and the edge endpoint coincide pixel-perfect.
+          const along_px = Math.round((dim * (i + 1)) / (n + 1) / 10) * 10;
           const handleStyle = { background: color, borderColor: '#e2e8f0' };
-          handleStyle[along] = `${pct}%`;
+          handleStyle[along] = `${along_px}px`;
           return (
             <Handle
               key={`${key}-${i}`}
