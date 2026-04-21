@@ -447,13 +447,19 @@ html, body, #root {
    know where lines snap. Floating edges attach to the closest side
    automatically — users rarely need to pick a specific anchor. */
 .port-handle {
-  width: 10px !important;
-  height: 10px !important;
+  width: 12px !important;
+  height: 12px !important;
   border: 2px solid var(--text) !important;
   opacity: 0;
-  pointer-events: auto;
+  pointer-events: auto !important;
+  z-index: 5;
   transition: opacity 0.12s;
 }
+.port-handle:hover { opacity: 1 !important; transform: translate(-50%, -50%) scale(1.25); }
+.react-flow__handle-right.port-handle:hover  { transform: translate(0, -50%) scale(1.25); }
+.react-flow__handle-left.port-handle:hover   { transform: translate(0, -50%) scale(1.25); }
+.react-flow__handle-top.port-handle:hover    { transform: translate(-50%, 0) scale(1.25); }
+.react-flow__handle-bottom.port-handle:hover { transform: translate(-50%, 0) scale(1.25); }
 .net-node:hover  .port-handle { opacity: 0.6; }
 .net-node.selected .port-handle { opacity: 1; }
 
@@ -461,13 +467,15 @@ html, body, #root {
    but sized to sit on the zone's big border. Hidden until the zone or
    a connecting edge touches it. */
 .zone-handle {
-  width: 12px !important;
-  height: 12px !important;
+  width: 14px !important;
+  height: 14px !important;
   border: 2px solid var(--text) !important;
   opacity: 0;
-  pointer-events: auto;
+  pointer-events: auto !important;
+  z-index: 5;
   transition: opacity 0.12s;
 }
+.zone-handle:hover { opacity: 1 !important; }
 .zone-node:hover .zone-handle { opacity: 0.45; }
 .zone-node.selected .zone-handle { opacity: 0.9; }
 

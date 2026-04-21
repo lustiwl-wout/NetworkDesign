@@ -855,42 +855,42 @@ function NodeInspector({ node, view = 'management', allDesigns = [], currentId, 
   );
 }
 
-function HandleCountRows({ data, onChange }) {
+function HandleCountRows({ data, onChange, defaultCount = 1 }) {
   const handles = data?.handles ?? {};
   const setSide = (side, v) => {
-    const n = Math.max(1, Math.min(12, Number(v) || 1));
+    const n = Math.max(0, Math.min(12, Number(v) || 0));
     onChange({ handles: { ...handles, [side]: n } });
   };
-  const val = (side) => handles[side] ?? 1;
+  const val = (side) => handles[side] ?? defaultCount;
   return (
     <>
       <label>Connection points per side</label>
       <div className="handle-grid">
         <div>
           <span>Top</span>
-          <input type="number" min="1" max="12" value={val('t')}
+          <input type="number" min="0" max="12" value={val('t')}
             onChange={(e) => setSide('t', e.target.value)} />
         </div>
         <div>
           <span>Right</span>
-          <input type="number" min="1" max="12" value={val('r')}
+          <input type="number" min="0" max="12" value={val('r')}
             onChange={(e) => setSide('r', e.target.value)} />
         </div>
         <div>
           <span>Bottom</span>
-          <input type="number" min="1" max="12" value={val('b')}
+          <input type="number" min="0" max="12" value={val('b')}
             onChange={(e) => setSide('b', e.target.value)} />
         </div>
         <div>
           <span>Left</span>
-          <input type="number" min="1" max="12" value={val('l')}
+          <input type="number" min="0" max="12" value={val('l')}
             onChange={(e) => setSide('l', e.target.value)} />
         </div>
       </div>
       <p className="hint small">
-        Add extra points to separate different traffic on the same side
-        (e.g. Network link + OOB). Edges drawn from a specific point
-        stay anchored there; edges drawn without a handle float.
+        Add points to expose drag-to-connect anchors. More than one on
+        a side keeps different traffic (e.g. Network link + OOB)
+        visually separated. Edges drawn without a handle still float.
       </p>
     </>
   );
@@ -916,7 +916,7 @@ function ZoneInspector({ node, onChange, onDelete }) {
         onChange={(e) => onChange({ color: e.target.value })}
       />
       <p className="hint">Drag the corner to resize. Zones sit behind devices.</p>
-      <HandleCountRows data={d} onChange={onChange} />
+      <HandleCountRows data={d} onChange={onChange} defaultCount={0} />
       <button className="btn danger" onClick={onDelete}>Delete zone</button>
     </>
   );

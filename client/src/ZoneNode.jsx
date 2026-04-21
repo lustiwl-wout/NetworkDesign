@@ -12,9 +12,14 @@ const SIDES = [
   { key: 'l', pos: Position.Left,   along: 'top'   },
 ];
 
+// Zones default to ZERO connection points per side — readers of a zone
+// usually read the whole compartment, and connections are drawn
+// explicitly through devices inside. Set a value > 0 in the inspector
+// to expose drag-to-connect anchors on that side.
 function sideCount(data, sideKey) {
   const n = data?.handles?.[sideKey];
-  return Number.isFinite(n) && n > 0 ? Math.min(Math.floor(n), 12) : 1;
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(0, Math.min(Math.floor(n), 12));
 }
 
 export default function ZoneNode({ data, selected }) {
