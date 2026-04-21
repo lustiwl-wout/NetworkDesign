@@ -1,4 +1,5 @@
 :root {
+  /* Dark theme (default) */
   --bg: #0f172a;
   --panel: #1e293b;
   --panel-2: #273449;
@@ -11,6 +12,27 @@
   --risk-h: #ef4444;
   --risk-m: #f59e0b;
   --risk-l: #22c55e;
+
+  /* Tokens used by nodes, edges, overlays. Re-declared per theme below. */
+  --node-bg: #1e293b;
+  --floating-bg: rgba(15, 23, 42, 0.92);
+  --grid: #334155;
+}
+
+html.theme-light {
+  --bg: #f4f6fb;
+  --panel: #ffffff;
+  --panel-2: #f1f5f9;
+  --border: #d1d9e6;
+  --text: #0f172a;
+  --muted: #64748b;
+  --accent: #0ea5e9;
+  --accent-2: #0284c7;
+  --danger: #dc2626;
+
+  --node-bg: #ffffff;
+  --floating-bg: rgba(255, 255, 255, 0.95);
+  --grid: #d1d9e6;
 }
 
 * { box-sizing: border-box; }
@@ -161,6 +183,13 @@ html, body, #root {
 .toggle-row input { width: auto; margin: 0; }
 
 /* Management ↔ Engineering view switch in the topbar */
+.theme-btn {
+  min-width: 34px;
+  padding: 6px 10px;
+  font-size: 15px;
+  line-height: 1;
+}
+
 .view-switch {
   display: inline-flex;
   background: var(--panel-2);
@@ -216,7 +245,7 @@ html, body, #root {
   position: absolute;
   top: 60px;
   left: 16px;
-  background: rgba(15, 23, 42, 0.92);
+  background: var(--floating-bg);
   border: 1px solid #f59e0b;
   color: #e2e8f0;
   padding: 10px 14px;
@@ -397,7 +426,7 @@ html, body, #root {
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  box-shadow: 0 0 0 2px #1e293b;
+  box-shadow: 0 0 0 2px var(--node-bg);
 }
 .phase-badge {
   position: absolute;
@@ -407,7 +436,7 @@ html, body, #root {
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  background: rgba(15, 23, 42, 0.85);
+  background: var(--floating-bg);
   padding: 2px 6px;
   border: 1px solid;
   border-radius: 4px;
@@ -480,7 +509,7 @@ html, body, #root {
 .react-flow__edge-label-floating {
   position: absolute;
   pointer-events: all;
-  background: rgba(15, 23, 42, 0.92);
+  background: var(--floating-bg);
   border: 1px solid rgba(148, 163, 184, 0.25);
   color: var(--text);
   font-size: 11px;

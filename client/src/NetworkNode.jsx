@@ -24,7 +24,7 @@ export default function NetworkNode({ data, selected }) {
 
   const style = {
     borderColor: selected ? accent : `${accent}55`,
-    background: `linear-gradient(180deg, ${accent}1f 0%, ${accent}0a 60%, transparent 100%), #1e293b`,
+    background: `linear-gradient(180deg, ${accent}1f 0%, ${accent}0a 60%, transparent 100%), var(--node-bg)`,
     boxShadow: selected
       ? `0 0 0 2px ${accent}66, 0 4px 14px rgba(0,0,0,0.45)`
       : `0 3px 10px rgba(0,0,0,0.35)`,

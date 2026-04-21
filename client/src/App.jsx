@@ -13,7 +13,6 @@ import NetworkNode from './NetworkNode.jsx';
 import ZoneNode from './ZoneNode.jsx';
 import AnnotationNode from './AnnotationNode.jsx';
 import SmartEdge from './SmartEdge.jsx';
-import DebugOverlay from './DebugOverlay.jsx';
 import DeviceIcon, { ICON_META } from './DeviceIcons.jsx';
 import AdminPortal from './AdminPortal.jsx';
 import DesignsPage from './DesignsPage.jsx';
@@ -59,6 +58,7 @@ function Editor({ me }) {
   // Write access: logged in as user or admin (but not the view-only "viewer" role).
   const canSave = !!me && me.role !== 'viewer';
   const isAdmin = me?.role === 'admin';
+  const [theme, setTheme] = useTheme();
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [deviceTypes, setDeviceTypes] = useState([]);
@@ -69,11 +69,8 @@ function Editor({ me }) {
   const [selectedEdge, setSelectedEdge] = useState(null);
   const [toast, setToast] = useState(null);
   const [present, setPresent] = useState(false);
-  const [debug, setDebug] = useState(false);
   const [phaseFilter, setPhaseFilter] = useState(null); // null = show all
   const [view, setView] = useState(me?.defaultView ?? 'management'); // 'management' | 'engineering'
-  const [narrative, setNarrative] = useState({});
-  const [caseOpen, setCaseOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [versions, setVersions] = useState([]);
   const [allDesigns, setAllDesigns] = useState([]);
@@ -122,7 +119,6 @@ function Editor({ me }) {
         setName(d.name);
         setNodes(d.graph?.nodes ?? []);
         setEdges(styleEdges(d.graph?.edges ?? []));
-        setNarrative(d.narrative ?? {});
       } catch (e) {
         console.error('Failed to auto-load design:', e);
       }
@@ -271,7 +267,6 @@ function Editor({ me }) {
     setName('Untitled design');
     setNodes([]);
     setEdges([]);
-    setNarrative({});
     setSelectedNode(null);
     setSelectedEdge(null);
   };
@@ -283,7 +278,6 @@ function Editor({ me }) {
       setName(d.name);
       setNodes(d.graph?.nodes ?? []);
       setEdges(styleEdges(d.graph?.edges ?? []));
-      setNarrative(d.narrative ?? {});
       flash(`Loaded "${d.name}"`);
     } catch (e) { flash(`Load failed: ${e.message}`); }
   };
@@ -296,10 +290,10 @@ function Editor({ me }) {
     const graph = { nodes, edges };
     try {
       if (currentId) {
-        const d = await api.update(currentId, { name, graph, narrative });
+        const d = await api.update(currentId, { name, graph });
         flash(`Saved "${d.name}"`);
       } else {
-        const d = await api.create({ name, graph, narrative });
+        const d = await api.create({ name, graph });
         setCurrentId(d.id);
         flash(`Created "${d.name}"`);
       }
@@ -320,7 +314,6 @@ function Editor({ me }) {
       setName(d.name);
       setNodes(d.graph?.nodes ?? []);
       setEdges(styleEdges(d.graph?.edges ?? []));
-      setNarrative(d.narrative ?? {});
       setHistoryOpen(false);
       flash('Restored');
     } catch (e) { flash(`Restore failed: ${e.message}`); }
@@ -441,6 +434,13 @@ function Editor({ me }) {
           onChange={(e) => setName(e.target.value)}
           placeholder="Design name"
         />
+        <button
+          type="button"
+          className="btn secondary theme-btn"
+          onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
+          title={theme === 'light' ? 'Switch to dark theme' : 'Switch to light theme'}
+          aria-label="Toggle theme"
+        >{theme === 'light' ? '🌙' : '☀︎'}</button>
         <div className="view-switch" role="tablist" aria-label="View">
           <button
             type="button"
@@ -469,9 +469,6 @@ function Editor({ me }) {
         )}
         <button className="btn secondary" onClick={newDesign}>New</button>
         <a className="btn secondary" href="/designs">Designs</a>
-        <button className="btn secondary" onClick={() => setCaseOpen(true)} title="Business case narrative">
-          Case
-        </button>
         {canSave && currentId && (
           <button className="btn secondary" onClick={() => { setHistoryOpen(true); loadVersions(); }} title="Version history">
             History
@@ -480,13 +477,6 @@ function Editor({ me }) {
         <button className="btn secondary" onClick={exportPng}>Export PNG</button>
         <button className="btn secondary" onClick={() => setPresent(true)} title="Enter presentation mode (Esc to exit)">
           ▶ Present
-        </button>
-        <button
-          className={`btn secondary${debug ? ' active' : ''}`}
-          onClick={() => setDebug((v) => !v)}
-          title="Toggle routing / layout debug overlay"
-        >
-          🐞 Debug
         </button>
         {canSave && <button className="btn" onClick={saveDesign}>Save</button>}
         {canSave && currentId && (
@@ -576,10 +566,9 @@ function Editor({ me }) {
           snapToGrid
           snapGrid={[10, 10]}
         >
-          <Background gap={16} size={1} color="#334155" />
+          <Background gap={16} size={1} color="var(--grid)" />
           <Controls />
           <MiniMap pannable zoomable maskColor="rgba(15,23,42,0.6)" />
-          {debug && <DebugOverlay />}
         </ReactFlow>
         {!canSave && (
           <div className="demo-banner" role="status">
@@ -637,13 +626,6 @@ function Editor({ me }) {
             )}
           </InspectorPopup>
         )}
-        {caseOpen && (
-          <CasePanel
-            narrative={narrative}
-            onChange={setNarrative}
-            onClose={() => setCaseOpen(false)}
-          />
-        )}
         {historyOpen && (
           <HistoryPanel
             versions={versions}
@@ -653,57 +635,6 @@ function Editor({ me }) {
         )}
         {toast && <div className="toast">{toast}</div>}
       </div>
-    </div>
-  );
-}
-
-function CasePanel({ narrative, onChange, onClose }) {
-  const set = (patch) => onChange({ ...narrative, ...patch });
-  return (
-    <div className="side-panel" onMouseDown={(e) => e.stopPropagation()}>
-      <header>
-        <h2>Business case</h2>
-        <button className="inspector-close" onClick={onClose}>×</button>
-      </header>
-      <p className="hint">
-        A short narrative to accompany the diagram. Saved with the design and
-        shown on the Designs page. Leave blank what you don't need.
-      </p>
-      <label>Problem / current state</label>
-      <textarea
-        rows="4"
-        value={narrative.problem ?? ''}
-        onChange={(e) => set({ problem: e.target.value })}
-        placeholder="What's broken today, or why act now?"
-      />
-      <label>Options considered</label>
-      <textarea
-        rows="3"
-        value={narrative.options ?? ''}
-        onChange={(e) => set({ options: e.target.value })}
-        placeholder="Key alternatives, with one-line pros/cons."
-      />
-      <label>Recommendation</label>
-      <textarea
-        rows="4"
-        value={narrative.recommendation ?? ''}
-        onChange={(e) => set({ recommendation: e.target.value })}
-        placeholder="What we're proposing and why."
-      />
-      <label>Risks &amp; mitigations</label>
-      <textarea
-        rows="3"
-        value={narrative.risks ?? ''}
-        onChange={(e) => set({ risks: e.target.value })}
-        placeholder="What could go wrong — and how we'd handle it."
-      />
-      <label>Notes</label>
-      <textarea
-        rows="3"
-        value={narrative.notes ?? ''}
-        onChange={(e) => set({ notes: e.target.value })}
-      />
-      <p className="hint small">Changes are stored next time you press <b>Save</b>.</p>
     </div>
   );
 }
@@ -1021,7 +952,21 @@ function EdgeInspector({ edge, view = 'management', onChange, onKindChange, onDe
   );
 }
 
+function useTheme() {
+  const [theme, setTheme] = useState(() => {
+    if (typeof window === 'undefined') return 'dark';
+    return localStorage.getItem('theme') === 'light' ? 'light' : 'dark';
+  });
+  useEffect(() => {
+    const html = document.documentElement;
+    html.classList.toggle('theme-light', theme === 'light');
+    localStorage.setItem('theme', theme);
+  }, [theme]);
+  return [theme, setTheme];
+}
+
 function Root() {
+  useTheme();
   const [me, setMe] = useState(undefined); // undefined = loading
   const path = typeof window !== 'undefined' ? window.location.pathname : '/';
 
