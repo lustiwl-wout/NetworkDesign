@@ -166,7 +166,11 @@ function Editor({ me }) {
       const raw = event.dataTransfer.getData('application/reactflow');
       if (!raw) return;
       const { kind, value } = JSON.parse(raw);
-      const position = screenToFlowPosition({ x: event.clientX, y: event.clientY });
+      const rawPos = screenToFlowPosition({ x: event.clientX, y: event.clientY });
+      // Snap programmatic drops to the same 10 px grid React Flow uses
+      // for drag. Keeps every node aligned so edges can always route
+      // orthogonally with side midpoints landing on the grid.
+      const position = { x: Math.round(rawPos.x / 10) * 10, y: Math.round(rawPos.y / 10) * 10 };
 
       if (kind === 'device') {
         const d = deviceByKey[value];
@@ -572,6 +576,8 @@ function Editor({ me }) {
           fitView
           deleteKeyCode={['Backspace', 'Delete']}
           defaultEdgeOptions={{ type: 'smart' }}
+          snapToGrid
+          snapGrid={[10, 10]}
         >
           <Background gap={16} size={1} color="#334155" />
           <Controls />
