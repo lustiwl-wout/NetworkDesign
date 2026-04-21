@@ -116,51 +116,48 @@ export default function SmartEdge(props) {
   );
 }
 
-// --- Floating endpoint math (standard React Flow pattern) ---
+// --- Floating endpoint math ---
+// Snap to the MIDPOINT of whichever side of the node faces the other
+// endpoint. Anchoring on side-midpoints guarantees that the first and
+// last segment of the path are perpendicular to the node's side — i.e.
+// purely horizontal or purely vertical. Combined with A*-no-diagonal,
+// the whole edge is orthogonal: straight segments with right-angle
+// corners, never diagonals.
 
 function getFloatingEdgeParams(source, target) {
-  const si = getNodeIntersection(source, target);
-  const ti = getNodeIntersection(target, source);
+  const si = getSideAnchor(source, target);
+  const ti = getSideAnchor(target, source);
   return {
     sx: si.x,
     sy: si.y,
     tx: ti.x,
     ty: ti.y,
-    sourcePosition: getEdgePosition(source, si),
-    targetPosition: getEdgePosition(target, ti),
+    sourcePosition: si.side,
+    targetPosition: ti.side,
   };
 }
 
-function getNodeIntersection(source, target) {
-  const sp = source.positionAbsolute ?? source.position;
-  const tp = target.positionAbsolute ?? target.position;
-  const w = (source.width ?? 170) / 2;
-  const h = (source.height ?? 150) / 2;
-  const x2 = sp.x + w;
-  const y2 = sp.y + h;
-  const x1 = tp.x + (target.width ?? 170) / 2;
-  const y1 = tp.y + (target.height ?? 150) / 2;
+function getSideAnchor(self, other) {
+  const sp = self.positionAbsolute ?? self.position;
+  const op = other.positionAbsolute ?? other.position;
+  const w = self.width  ?? 170;
+  const h = self.height ?? 150;
+  const scx = sp.x + w / 2;
+  const scy = sp.y + h / 2;
+  const ocx = op.x + (other.width  ?? 170) / 2;
+  const ocy = op.y + (other.height ?? 150) / 2;
+  const dx = ocx - scx;
+  const dy = ocy - scy;
 
-  const xx1 = (x1 - x2) / (2 * w) - (y1 - y2) / (2 * h);
-  const yy1 = (x1 - x2) / (2 * w) + (y1 - y2) / (2 * h);
-  const a = 1 / (Math.abs(xx1) + Math.abs(yy1) || 1);
-  const xx3 = a * xx1;
-  const yy3 = a * yy1;
-  return { x: w * (xx3 + yy3) + x2, y: h * (-xx3 + yy3) + y2 };
-}
-
-function getEdgePosition(node, point) {
-  const np = node.positionAbsolute ?? node.position;
-  const nx = Math.round(np.x);
-  const ny = Math.round(np.y);
-  const px = Math.round(point.x);
-  const py = Math.round(point.y);
-  const w = node.width ?? 170;
-  const h = node.height ?? 150;
-
-  if (px <= nx + 1) return Position.Left;
-  if (px >= nx + w - 1) return Position.Right;
-  if (py <= ny + 1) return Position.Top;
-  if (py >= ny + h - 1) return Position.Bottom;
-  return Position.Top;
+  // Compare normalised magnitudes (aspect-aware) to pick dominant axis.
+  if (Math.abs(dx) * h >= Math.abs(dy) * w) {
+    // Horizontal side
+    return dx >= 0
+      ? { x: sp.x + w, y: scy, side: Position.Right }
+      : { x: sp.x,     y: scy, side: Position.Left };
+  }
+  // Vertical side
+  return dy >= 0
+    ? { x: scx, y: sp.y + h, side: Position.Bottom }
+    : { x: scx, y: sp.y,     side: Position.Top };
 }

@@ -259,19 +259,21 @@ function Container({ accent }) {
 }
 
 export const ICON_META = {
-  router:         { accent: '#38bdf8', Component: Router },
-  switch:         { accent: '#14b8a6', Component: Switch },
-  firewall:       { accent: '#ef4444', Component: Firewall },
-  server:         { accent: '#a78bfa', Component: Server },
-  hypervisor:     { accent: '#7c3aed', Component: Hypervisor },
-  vm:             { accent: '#c084fc', Component: VM },
-  container:      { accent: '#2dd4bf', Component: Container },
-  client:         { accent: '#64748b', Component: Client },
-  cloud:          { accent: '#0ea5e9', Component: Cloud },
-  ap:             { accent: '#22d3ee', Component: AccessPoint },
-  database:       { accent: '#f59e0b', Component: Database },
-  'load-balancer':{ accent: '#10b981', Component: LoadBalancer },
-  generic:        { accent: '#94a3b8', Component: Generic },
+  router:           { accent: '#38bdf8', Component: Router },
+  switch:           { accent: '#14b8a6', Component: Switch },
+  firewall:         { accent: '#ef4444', Component: Firewall },
+  server:           { accent: '#a78bfa', Component: Server },
+  hypervisor:       { accent: '#7c3aed', Component: Hypervisor },
+  vm:               { accent: '#c084fc', Component: VM },
+  container:        { accent: '#2dd4bf', Component: Container },
+  client:           { accent: '#64748b', Component: Client },
+  cloud:            { accent: '#0ea5e9', Component: Cloud },
+  ap:               { accent: '#22d3ee', Component: AccessPoint },
+  database:         { accent: '#f59e0b', Component: Database },
+  'load-balancer':  { accent: '#10b981', Component: LoadBalancer },
+  'boundary-input': { accent: '#22c55e', Component: BoundaryIn },
+  'boundary-output':{ accent: '#f97316', Component: BoundaryOut },
+  generic:          { accent: '#94a3b8', Component: Generic },
 };
 
 export const ICON_KEYS = Object.keys(ICON_META);
