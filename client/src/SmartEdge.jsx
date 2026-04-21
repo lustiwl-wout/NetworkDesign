@@ -99,7 +99,11 @@ export default function SmartEdge(props) {
   // single L-shape, eliminating visual zigzag.
   const mid = shortcut(midRaw, obstacles);
 
-  const raw = [sa, ...mid, ta];
+  // Include the stub tips explicitly so the first/last segment is
+  // guaranteed axis-aligned with the anchor (the stub is perpendicular
+  // to the side). Without this, an unsnapped anchor could connect to
+  // the first grid point diagonally.
+  const raw = [sa, ss, ...mid, ts, ta];
   const points = simplify(raw);
   const d = polyline(points);
 
@@ -198,12 +202,17 @@ function snapAnchor(a) {
   return { x: quant(a.x), y: quant(a.y), side: a.side };
 }
 
+// Perpendicular stub. Quantise the axis we're stepping along so the
+// stub tip lands on the grid (A* starts there), while keeping the
+// other axis pinned to the exact handle position. That way the first
+// segment (handle → stub tip) stays axis-aligned with the anchor, and
+// the next segment (stub tip → first grid cell) is also axis-aligned.
 function stubOut(a) {
   switch (a.side) {
-    case Position.Top:    return { x: a.x, y: a.y - STUB };
-    case Position.Bottom: return { x: a.x, y: a.y + STUB };
-    case Position.Left:   return { x: a.x - STUB, y: a.y };
-    case Position.Right:  return { x: a.x + STUB, y: a.y };
+    case Position.Top:    return { x: a.x,             y: quant(a.y - STUB) };
+    case Position.Bottom: return { x: a.x,             y: quant(a.y + STUB) };
+    case Position.Left:   return { x: quant(a.x - STUB), y: a.y };
+    case Position.Right:  return { x: quant(a.x + STUB), y: a.y };
     default:              return { x: a.x, y: a.y };
   }
 }
