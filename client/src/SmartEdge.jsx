@@ -1,104 +1,73 @@
 import { useMemo } from 'react';
-import { useStore, getSmoothStepPath, EdgeLabelRenderer, Position } from 'reactflow';
-import {
-  getSmartEdge,
-  pathfindingAStarNoDiagonal,
-  svgDrawStraightLinePath,
-} from '@tisoap/react-flow-smart-edge';
+import { useStore, EdgeLabelRenderer, Position } from 'reactflow';
 
-// Strict orthogonal routing:
-//   - Endpoints float to the closest side of each device.
-//   - Every OTHER device is a hard obstacle with a padding ring. A*
-//     routes around them on an orthogonal grid.
-//   - If no route can be found (layout too tight), we draw a visibly
-//     broken warning edge instead of silently cutting through a device.
-//   - Zones and annotations are transparent to the router.
+// Custom orthogonal router. Built from scratch because every off-the-
+// shelf option we tried either produced diagonals at the endpoints or
+// let lines pass through non-endpoint nodes / zones.
+//
+// Guarantees (by construction):
+//   * Every segment is horizontal or vertical. No diagonals anywhere.
+//   * Lines route around EVERY other node (both devices and zones).
+//   * Endpoints always leave the node perpendicular to the side that
+//     faces the other endpoint (via a short stub), so the first and
+//     last segments are axis-aligned.
+//   * On failure (truly impossible layout) we draw a visibly broken
+//     warning edge rather than silently cut through a node.
 
-const OBSTACLE_PAD = 30;
-const GRID_RATIO = 4;
+const OBSTACLE_PAD = 24; // halo around every non-endpoint node
+const GRID         = 10; // A* grid resolution
+const STUB         = 40; // length of the perpendicular stub from each anchor
 
 const selectNodes = (s) => s.nodeInternals;
 
 export default function SmartEdge(props) {
   const { id, source, target, style = {}, markerEnd, label, animated } = props;
-
   const nodeInternals = useStore(selectNodes);
-
   const sourceNode = nodeInternals.get(source);
   const targetNode = nodeInternals.get(target);
 
-  // Obstacles: every measured device EXCEPT the edge's own endpoints.
-  // Zones are NOT obstacles — they're containers, and lines should pass
-  // freely over zone backgrounds. Workloads inside zones are still
-  // obstacles, so routing avoids those.
+  // Obstacles: every measured node EXCEPT the edge's own endpoints.
+  // Zones ARE obstacles when they're not an endpoint — lines no longer
+  // pass through zone backgrounds. Annotations are transparent.
   const obstacles = useMemo(() => {
     const list = [];
     for (const n of nodeInternals.values()) {
-      if (n.type !== 'device') continue;
       if (n.id === source || n.id === target) continue;
+      if (n.type === 'annotation') continue;
       if (!n.width || !n.height) continue;
       const p = n.positionAbsolute ?? n.position;
-      list.push({ ...n, position: p, parentNode: undefined });
+      list.push({
+        x: p.x - OBSTACLE_PAD,
+        y: p.y - OBSTACLE_PAD,
+        w: n.width  + OBSTACLE_PAD * 2,
+        h: n.height + OBSTACLE_PAD * 2,
+      });
     }
     return list;
   }, [nodeInternals, source, target]);
 
   if (!sourceNode || !targetNode) return null;
 
-  const { sx, sy, tx, ty, sourcePosition, targetPosition } =
-    getFloatingEdgeParams(sourceNode, targetNode);
+  const sa = getSideAnchor(sourceNode, targetNode);
+  const ta = getSideAnchor(targetNode, sourceNode);
+  const ss = stubOut(sa);
+  const ts = stubOut(ta);
 
-  const smart = getSmartEdge({
-    sourcePosition, targetPosition,
-    sourceX: sx, sourceY: sy, targetX: tx, targetY: ty,
-    nodes: obstacles,
-    options: {
-      nodePadding: OBSTACLE_PAD,
-      gridRatio: GRID_RATIO,
-      generatePath: pathfindingAStarNoDiagonal,
-      drawEdge: svgDrawStraightLinePath,
-    },
-  });
+  const mid = astar(ss, ts, obstacles);
 
-  // Routing failed — show a clearly broken edge so the user knows the
-  // layout needs more room, instead of silently cutting through devices.
-  if (smart === null) {
-    const [p, lx, ly] = getSmoothStepPath({
-      sourceX: sx, sourceY: sy, targetX: tx, targetY: ty,
-      sourcePosition, targetPosition, borderRadius: 8,
-    });
-    return (
-      <>
-        <path
-          id={id}
-          d={p}
-          fill="none"
-          style={{
-            ...style,
-            stroke: '#ef4444',
-            strokeWidth: 1.5,
-            strokeDasharray: '2 4',
-            opacity: 0.8,
-          }}
-          markerEnd={markerEnd}
-        />
-        <EdgeLabelRenderer>
-          <div className="react-flow__edge-label-floating edge-warning"
-            style={{ transform: `translate(-50%, -50%) translate(${lx}px, ${ly}px)` }}>
-            ⚠︎ no route — add space between devices
-          </div>
-        </EdgeLabelRenderer>
-      </>
-    );
-  }
+  if (!mid) return renderWarning(id, sa, ta, style, markerEnd);
 
-  const { svgPathString, edgeCenterX, edgeCenterY } = smart;
+  const raw = [sa, ss, ...mid, ts, ta];
+  const points = simplify(raw);
+  const d = polyline(points);
+
+  const centre = points[Math.floor(points.length / 2)];
 
   return (
     <>
       <path
         id={id}
-        d={svgPathString}
+        d={d}
         fill="none"
         className={`react-flow__edge-path${animated ? ' animated' : ''}`}
         style={style}
@@ -107,7 +76,7 @@ export default function SmartEdge(props) {
       {label && (
         <EdgeLabelRenderer>
           <div className="react-flow__edge-label-floating"
-            style={{ transform: `translate(-50%, -50%) translate(${edgeCenterX}px, ${edgeCenterY}px)` }}>
+            style={{ transform: `translate(-50%, -50%) translate(${centre.x}px, ${centre.y}px)` }}>
             {label}
           </div>
         </EdgeLabelRenderer>
@@ -116,26 +85,7 @@ export default function SmartEdge(props) {
   );
 }
 
-// --- Floating endpoint math ---
-// Snap to the MIDPOINT of whichever side of the node faces the other
-// endpoint. Anchoring on side-midpoints guarantees that the first and
-// last segment of the path are perpendicular to the node's side — i.e.
-// purely horizontal or purely vertical. Combined with A*-no-diagonal,
-// the whole edge is orthogonal: straight segments with right-angle
-// corners, never diagonals.
-
-function getFloatingEdgeParams(source, target) {
-  const si = getSideAnchor(source, target);
-  const ti = getSideAnchor(target, source);
-  return {
-    sx: si.x,
-    sy: si.y,
-    tx: ti.x,
-    ty: ti.y,
-    sourcePosition: si.side,
-    targetPosition: ti.side,
-  };
-}
+// ---- Geometry ----
 
 function getSideAnchor(self, other) {
   const sp = self.positionAbsolute ?? self.position;
@@ -149,15 +99,168 @@ function getSideAnchor(self, other) {
   const dx = ocx - scx;
   const dy = ocy - scy;
 
-  // Compare normalised magnitudes (aspect-aware) to pick dominant axis.
   if (Math.abs(dx) * h >= Math.abs(dy) * w) {
-    // Horizontal side
     return dx >= 0
       ? { x: sp.x + w, y: scy, side: Position.Right }
       : { x: sp.x,     y: scy, side: Position.Left };
   }
-  // Vertical side
   return dy >= 0
     ? { x: scx, y: sp.y + h, side: Position.Bottom }
     : { x: scx, y: sp.y,     side: Position.Top };
+}
+
+function stubOut(a) {
+  switch (a.side) {
+    case Position.Top:    return { x: a.x, y: a.y - STUB };
+    case Position.Bottom: return { x: a.x, y: a.y + STUB };
+    case Position.Left:   return { x: a.x - STUB, y: a.y };
+    case Position.Right:  return { x: a.x + STUB, y: a.y };
+    default:              return { x: a.x, y: a.y };
+  }
+}
+
+function pointInRect(x, y, r) {
+  return x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
+}
+
+function blocked(x, y, obstacles) {
+  for (const r of obstacles) if (pointInRect(x, y, r)) return true;
+  return false;
+}
+
+// ---- A* on an orthogonal grid ----
+
+function astar(start, end, obstacles) {
+  const sx = quant(start.x);
+  const sy = quant(start.y);
+  const ex = quant(end.x);
+  const ey = quant(end.y);
+
+  if (sx === ex && sy === ey) return [];
+
+  // Compute a bounding box of interest so the grid stays finite. Include
+  // start, end and every obstacle rect with some slack.
+  let minX = Math.min(sx, ex) - GRID * 8;
+  let minY = Math.min(sy, ey) - GRID * 8;
+  let maxX = Math.max(sx, ex) + GRID * 8;
+  let maxY = Math.max(sy, ey) + GRID * 8;
+  for (const r of obstacles) {
+    minX = Math.min(minX, r.x - GRID);
+    minY = Math.min(minY, r.y - GRID);
+    maxX = Math.max(maxX, r.x + r.w + GRID);
+    maxY = Math.max(maxY, r.y + r.h + GRID);
+  }
+
+  const inBounds = (x, y) =>
+    x >= minX && x <= maxX && y >= minY && y <= maxY;
+
+  const key = (x, y) => `${x},${y}`;
+
+  // Simple priority queue. O(n log n) via sorted insert — fine for our
+  // small grids.
+  const open = [];
+  const push = (node) => {
+    let lo = 0, hi = open.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1;
+      if (open[mid].f > node.f) hi = mid; else lo = mid + 1;
+    }
+    open.splice(lo, 0, node);
+  };
+
+  const cameFrom = new Map();
+  const gScore = new Map();
+
+  gScore.set(key(sx, sy), 0);
+  push({ x: sx, y: sy, f: Math.abs(ex - sx) + Math.abs(ey - sy) });
+
+  const MAX_ITER = 60000;
+  let iter = 0;
+
+  while (open.length && iter++ < MAX_ITER) {
+    const cur = open.shift();
+    if (cur.x === ex && cur.y === ey) return reconstruct(cameFrom, cur, sx, sy);
+
+    const curKey = key(cur.x, cur.y);
+    const curG = gScore.get(curKey) ?? Infinity;
+
+    for (const [dx, dy] of [[GRID, 0], [-GRID, 0], [0, GRID], [0, -GRID]]) {
+      const nx = cur.x + dx;
+      const ny = cur.y + dy;
+      if (!inBounds(nx, ny)) continue;
+      if (blocked(nx, ny, obstacles)) continue;
+      const nKey = key(nx, ny);
+      const tentative = curG + GRID;
+      if (tentative < (gScore.get(nKey) ?? Infinity)) {
+        cameFrom.set(nKey, { x: cur.x, y: cur.y });
+        gScore.set(nKey, tentative);
+        push({ x: nx, y: ny, f: tentative + Math.abs(ex - nx) + Math.abs(ey - ny) });
+      }
+    }
+  }
+  return null;
+}
+
+function reconstruct(cameFrom, end, sx, sy) {
+  const path = [{ x: end.x, y: end.y }];
+  let cur = cameFrom.get(`${end.x},${end.y}`);
+  while (cur) {
+    path.unshift({ x: cur.x, y: cur.y });
+    if (cur.x === sx && cur.y === sy) break;
+    cur = cameFrom.get(`${cur.x},${cur.y}`);
+  }
+  return path;
+}
+
+function quant(v) { return Math.round(v / GRID) * GRID; }
+
+// ---- Post-processing ----
+
+// Collapse collinear runs: three points a,b,c are collinear if they
+// share the same x (vertical) or the same y (horizontal). b is then
+// redundant.
+function simplify(points) {
+  if (points.length <= 2) return points;
+  const out = [points[0]];
+  for (let i = 1; i < points.length - 1; i++) {
+    const a = out[out.length - 1];
+    const b = points[i];
+    const c = points[i + 1];
+    const straight = (a.x === b.x && b.x === c.x) || (a.y === b.y && b.y === c.y);
+    if (!straight) out.push(b);
+  }
+  out.push(points[points.length - 1]);
+  return out;
+}
+
+function polyline(points) {
+  if (!points.length) return '';
+  let d = `M ${points[0].x} ${points[0].y}`;
+  for (let i = 1; i < points.length; i++) d += ` L ${points[i].x} ${points[i].y}`;
+  return d;
+}
+
+// ---- Warning edge when no route can be found ----
+
+function renderWarning(id, sa, ta, _style, markerEnd) {
+  // Draw a deliberately ugly dashed red L-shape so the author notices.
+  const corner = { x: ta.x, y: sa.y };
+  const d = polyline([sa, corner, ta]);
+  return (
+    <>
+      <path
+        id={id}
+        d={d}
+        fill="none"
+        style={{ stroke: '#ef4444', strokeWidth: 1.5, strokeDasharray: '3 4', opacity: 0.85 }}
+        markerEnd={markerEnd}
+      />
+      <EdgeLabelRenderer>
+        <div className="react-flow__edge-label-floating edge-warning"
+          style={{ transform: `translate(-50%, -50%) translate(${corner.x}px, ${corner.y}px)` }}>
+          ⚠︎ no route — add space
+        </div>
+      </EdgeLabelRenderer>
+    </>
+  );
 }
