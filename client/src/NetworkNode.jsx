@@ -108,11 +108,6 @@ export default function NetworkNode({ id, data, selected }) {
         {data?.model    && <div>{data.model}</div>}
       </div>
 
-      {selected && size.w > 0 && (
-        <div className="size-chip" style={{ borderColor: accent, color: accent }}>
-          {Math.round(size.w)} × {Math.round(size.h)}
-        </div>
-      )}
     </div>
   );
 }
