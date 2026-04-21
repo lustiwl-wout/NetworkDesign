@@ -79,13 +79,17 @@ export default function SmartEdge(props) {
   // node's side midpoint falls between grid cells.
   // If the edge was drawn from a specific handle, honour it; otherwise
   // fall back to the floating side midpoint closest to the other node.
-  // Handle-anchored endpoints are authoritative — don't snap or we
-  // land a few pixels off the visible handle. Floating anchors still
-  // snap, so lines stay clean against the grid.
-  const saHandle = anchorFromHandle(sourceNode, srcHandle);
-  const taHandle = anchorFromHandle(targetNode, tgtHandle);
-  const sa = saHandle ?? snapAnchor(getSideAnchor(sourceNode, targetNode));
-  const ta = taHandle ?? snapAnchor(getSideAnchor(targetNode, sourceNode));
+  // Snap every anchor to the grid. The worst-case shift is 5 px —
+  // well within the handle dot's radius (handles are 14-16 px wide),
+  // so the line still visually ends inside the bubble, and every
+  // segment of the resulting path is perfectly grid-aligned → no
+  // micro-corners.
+  const sa = snapAnchor(
+    anchorFromHandle(sourceNode, srcHandle) ?? getSideAnchor(sourceNode, targetNode)
+  );
+  const ta = snapAnchor(
+    anchorFromHandle(targetNode, tgtHandle) ?? getSideAnchor(targetNode, sourceNode)
+  );
   const ss = stubOut(sa);
   const ts = stubOut(ta);
 
