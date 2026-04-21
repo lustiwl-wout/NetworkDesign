@@ -19,7 +19,6 @@ import AdminPortal from './AdminPortal.jsx';
 import DesignsPage from './DesignsPage.jsx';
 import LoginPage from './LoginPage.jsx';
 import ProfilePage from './ProfilePage.jsx';
-import { TEMPLATES } from './templates/index.js';
 import { api } from './api.js';
 import { deviceTypesApi, zoneTypesApi, edgeKindsApi } from './catalogApi.js';
 import { authApi } from './authApi.js';
@@ -31,7 +30,6 @@ const edgeTypes = { smart: SmartEdge };
 
 let tmpId = 1;
 const nextId = () => `n_${Date.now().toString(36)}_${tmpId++}`;
-const cloneGraph = (g) => JSON.parse(JSON.stringify(g));
 
 // Find the zone node whose rectangle contains the given flow position,
 // so dropped devices can auto-parent to it.
@@ -70,7 +68,6 @@ function Editor({ me }) {
   const [selectedNode, setSelectedNode] = useState(null);
   const [selectedEdge, setSelectedEdge] = useState(null);
   const [toast, setToast] = useState(null);
-  const [templateOpen, setTemplateOpen] = useState(false);
   const [present, setPresent] = useState(false);
   const [debug, setDebug] = useState(false);
   const [phaseFilter, setPhaseFilter] = useState(null); // null = show all
@@ -279,19 +276,6 @@ function Editor({ me }) {
     setSelectedEdge(null);
   };
 
-  const loadTemplate = (tpl) => {
-    const g = cloneGraph(tpl.graph);
-    setCurrentId(null);
-    setName(tpl.name);
-    setNodes(g.nodes);
-    setEdges(styleEdges(g.edges));
-    setNarrative({ problem: tpl.description ?? '' });
-    setSelectedNode(null);
-    setSelectedEdge(null);
-    setTemplateOpen(false);
-    flash(`Loaded template: ${tpl.name}`);
-  };
-
   const loadDesign = async (id) => {
     try {
       const d = await api.get(id);
@@ -472,21 +456,6 @@ function Editor({ me }) {
           >Engineering</button>
         </div>
         <div className="spacer" />
-        <div className="menu">
-          <button className="btn secondary" onClick={() => setTemplateOpen((v) => !v)}>
-            Templates ▾
-          </button>
-          {templateOpen && (
-            <div className="menu-pop">
-              {TEMPLATES.map((t) => (
-                <button key={t.id} className="menu-item" onClick={() => loadTemplate(t)}>
-                  <div className="menu-item-title">{t.name}</div>
-                  <div className="menu-item-desc">{t.description}</div>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
         {phaseOptions.length > 0 && (
           <select
             className="phase-filter"
@@ -597,7 +566,7 @@ function Editor({ me }) {
           onNodeClick={(_, node) => { setSelectedNode(node); setSelectedEdge(null); }}
           onEdgeClick={(_, edge) => { setSelectedEdge(edge); setSelectedNode(null); }}
           onNodeDragStop={onNodeDragStop}
-          onPaneClick={() => { setSelectedNode(null); setSelectedEdge(null); setTemplateOpen(false); }}
+          onPaneClick={() => { setSelectedNode(null); setSelectedEdge(null); }}
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
           connectionMode="loose"
