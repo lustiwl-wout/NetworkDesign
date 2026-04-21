@@ -16,12 +16,13 @@ import { useStore, EdgeLabelRenderer, Position } from 'reactflow';
 
 const OBSTACLE_PAD = 14; // halo around every non-endpoint node
 const GRID         = 10; // A* grid resolution
-const STUB         = 30; // length of the perpendicular stub from each anchor
+const STUB      = 20; // straight perpendicular distance from the handle
+const LANE_STEP = 20; // extra reach before the lateral lane jog happens
 
 // Per-kind lateral lane offset (px, multiple of the grid). Edges of
 // different kinds following the same route get spread into parallel
-// lanes near their anchor so their paths don't overlap visually.
-// 'network' stays at 0 (the default lane), others branch off.
+// lanes so their paths don't overlap. 'network' stays at 0 (the
+// default lane) — single-kind edges remain in a straight channel.
 const LANE_OFFSET = {
   network:    0,
   management: 20,
@@ -106,10 +107,10 @@ export default function SmartEdge(props) {
   );
   const kindKey = props.data?.kind ?? 'network';
   const lane = laneOffset(kindKey);
-  const [ss1, ss2] = lanedStub(sa, lane);
-  const [ts1, ts2] = lanedStub(ta, lane);
+  const [ss1, ss2, ss3] = lanedStub(sa, lane);
+  const [ts1, ts2, ts3] = lanedStub(ta, lane);
 
-  const midRaw = astar(ss2, ts2, obstacles);
+  const midRaw = astar(ss3, ts3, obstacles);
 
   if (!midRaw) return renderWarning(id, sa, ta, style, markerEnd);
 
@@ -123,9 +124,11 @@ export default function SmartEdge(props) {
   // guaranteed axis-aligned with the anchor (the stub is perpendicular
   // to the side). Without this, an unsnapped anchor could connect to
   // the first grid point diagonally.
-  // sa → ss1 (perpendicular stub) → ss2 (lateral lane shift) →
-  //   [A* path across obstacles] → ts2 → ts1 → ta.
-  const raw = [sa, ss1, ss2, ...mid, ts2, ts1, ta];
+  // sa → ss1 (perpendicular stub) → ss2 (extended perpendicular) →
+  //   ss3 (lateral lane shift) → [A* path] → ts3 → ts2 → ts1 → ta.
+  // For offset=0, ss1 === ss2 === ss3 (and same for target); simplify()
+  // drops duplicates so the network lane stays a clean straight path.
+  const raw = [sa, ss1, ss2, ss3, ...mid, ts3, ts2, ts1, ta];
   const points = simplify(raw);
   const d = polyline(points);
 
@@ -243,19 +246,38 @@ function stubOut(a) {
   }
 }
 
-// Two-waypoint stub: first straight out perpendicular to the side, then
-// a lateral shift along the parallel axis by `offset` px. When offset
-// is 0 both waypoints coincide and simplify() collapses them — no
-// penalty for the default lane. When offset is non-zero the edge gets
-// its own parallel lane near the anchor, so different kinds no longer
-// overlap each other on the same run.
+// Two-waypoint stub: first straight out perpendicular to the side by
+// STUB px, then (if offset is non-zero) extend LANE_STEP further
+// perpendicular AND shift laterally by `offset` in the parallel axis.
+// The combined segment stays orthogonal — no diagonals, and the kink
+// happens at STUB + LANE_STEP px from the handle, far enough that the
+// jog reads as "parallel lane" rather than an awkward bend at the
+// node. Returns two tips: the perpendicular stub and the lane tip.
+// When offset is 0 both tips coincide; simplify() collapses them.
+// Returns three waypoints:
+//   tip1 — perpendicular stub STUB px out from the handle
+//   tip2 — extended STUB + LANE_STEP px out (still same across-axis)
+//   tip3 — tip2 shifted by `offset` px in the ACROSS axis (the lane)
+// Every segment (anchor→tip1, tip1→tip2, tip2→tip3) is axis-aligned.
+// When offset is 0, tip2 === tip3 and simplify() collapses them; in
+// practice tip1 and tip2 also collapse because we always extend by
+// LANE_STEP only when there IS an offset.
 function lanedStub(a, offset) {
   const tip1 = stubOut(a);
-  if (!offset) return [tip1, tip1];
-  const tip2 = (a.side === Position.Top || a.side === Position.Bottom)
-    ? { x: tip1.x + offset, y: tip1.y }
-    : { x: tip1.x,          y: tip1.y + offset };
-  return [tip1, tip2];
+  if (!offset) return [tip1, tip1, tip1];
+  const tip2 = (() => {
+    switch (a.side) {
+      case Position.Top:    return { x: tip1.x, y: tip1.y - LANE_STEP };
+      case Position.Bottom: return { x: tip1.x, y: tip1.y + LANE_STEP };
+      case Position.Left:   return { x: tip1.x - LANE_STEP, y: tip1.y };
+      case Position.Right:  return { x: tip1.x + LANE_STEP, y: tip1.y };
+      default:              return tip1;
+    }
+  })();
+  const tip3 = (a.side === Position.Top || a.side === Position.Bottom)
+    ? { x: tip2.x + offset, y: tip2.y }
+    : { x: tip2.x,          y: tip2.y + offset };
+  return [tip1, tip2, tip3];
 }
 
 function pointInRect(x, y, r) {
