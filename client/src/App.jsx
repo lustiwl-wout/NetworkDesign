@@ -640,6 +640,10 @@ function Editor({ me }) {
           edgeTypes={edgeTypes}
           connectionMode="loose"
           fitView
+          fitViewOptions={{ padding: 0.4, maxZoom: 0.85 }}
+          defaultViewport={{ x: 0, y: 0, zoom: 0.7 }}
+          minZoom={0.2}
+          maxZoom={2}
           deleteKeyCode={['Backspace', 'Delete']}
           defaultEdgeOptions={{ type: 'smart' }}
           snapToGrid
