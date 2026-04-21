@@ -23,6 +23,7 @@ function publicUser(r) {
     displayName: r.display_name,
     role: r.role,
     totpEnabled: r.totp_enabled,
+    defaultView: r.default_view,
   };
 }
 
@@ -130,6 +131,27 @@ authRouter.post('/mfa/disable', requireAuth, async (req, res, next) => {
       [req.auth.user.id]
     );
     res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+authRouter.post('/preferences', requireAuth, async (req, res, next) => {
+  try {
+    const { defaultView } = req.body ?? {};
+    if (defaultView && !['management', 'engineering'].includes(defaultView)) {
+      return res.status(400).json({ error: 'defaultView must be management or engineering' });
+    }
+    const sets = [];
+    const vals = [];
+    if (defaultView !== undefined) {
+      sets.push(`default_view = $${sets.length + 2}`);
+      vals.push(defaultView);
+    }
+    if (!sets.length) return res.status(400).json({ error: 'no changes' });
+    const { rows } = await pool.query(
+      `UPDATE users SET ${sets.join(', ')} WHERE id = $1 RETURNING *`,
+      [req.auth.user.id, ...vals]
+    );
+    res.json({ user: publicUser(rows[0]) });
   } catch (err) { next(err); }
 });
 

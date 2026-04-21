@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { usersAdminApi } from './authApi.js';
 
-const BLANK = { email: '', password: '', displayName: '', role: 'user' };
+const BLANK = { email: '', password: '', displayName: '', role: 'user', defaultView: 'management' };
 
 export default function UsersAdmin() {
   const [items, setItems] = useState([]);
@@ -31,12 +31,14 @@ export default function UsersAdmin() {
           password: editing.password,
           displayName: editing.displayName,
           role: editing.role,
+          defaultView: editing.defaultView,
         });
         flash('User created');
       } else {
         await usersAdminApi.update(editing.id, {
           displayName: editing.displayName,
           role: editing.role,
+          defaultView: editing.defaultView,
         });
         flash('User updated');
       }
@@ -140,12 +142,27 @@ export default function UsersAdmin() {
               value={editing.role}
               onChange={(e) => setEditing({ ...editing, role: e.target.value })}
             >
+              <option value="viewer">Viewer (demo — no save)</option>
               <option value="user">User</option>
               <option value="admin">Administrator</option>
             </select>
             <p className="hint small">
-              Admins can edit the catalog, manage users, and see every design.
-              Users see only their own designs.
+              <b>Viewer</b> can load templates, edit the canvas and export PNG
+              but cannot save designs — use for demo or pre-prod accounts.<br />
+              <b>User</b> sees and edits only their own designs.<br />
+              <b>Administrator</b> can edit the catalog, manage users, and see every design.
+            </p>
+
+            <label>Default editor view</label>
+            <select
+              value={editing.defaultView ?? 'management'}
+              onChange={(e) => setEditing({ ...editing, defaultView: e.target.value })}
+            >
+              <option value="management">Management</option>
+              <option value="engineering">Engineering</option>
+            </select>
+            <p className="hint small">
+              Which view the editor opens in. The user can still toggle per session.
             </p>
 
             {mode === 'create' && (

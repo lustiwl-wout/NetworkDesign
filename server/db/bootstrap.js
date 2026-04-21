@@ -8,11 +8,13 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash  TEXT NOT NULL,
   display_name   TEXT,
   role           TEXT NOT NULL DEFAULT 'user',
+  default_view   TEXT NOT NULL DEFAULT 'management',
   totp_secret    TEXT,
   totp_enabled   BOOLEAN NOT NULL DEFAULT FALSE,
   created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+ALTER TABLE users ADD COLUMN IF NOT EXISTS default_view TEXT NOT NULL DEFAULT 'management';
 
 CREATE TABLE IF NOT EXISTS sessions (
   id            TEXT PRIMARY KEY,

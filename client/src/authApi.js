@@ -26,6 +26,7 @@ export const authApi = {
   mfaVerify: (code)  => req('/mfa/verify',  { method: 'POST', body: JSON.stringify({ code }) }),
   mfaDisable: (pw)   => req('/mfa/disable', { method: 'POST', body: JSON.stringify({ password: pw }) }),
   changePassword: (b) => req('/change-password', { method: 'POST', body: JSON.stringify(b) }),
+  updatePreferences: (b) => req('/preferences', { method: 'POST', body: JSON.stringify(b) }),
 };
 
 const ADMIN_BASE = '/api/admin/users';

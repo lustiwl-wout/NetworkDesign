@@ -71,6 +71,7 @@ function Editor({ me }) {
   const [present, setPresent] = useState(false);
   const [debug, setDebug] = useState(false);
   const [phaseFilter, setPhaseFilter] = useState(null); // null = show all
+  const [view, setView] = useState(me?.defaultView ?? 'management'); // 'management' | 'engineering'
   const [narrative, setNarrative] = useState({});
   const [caseOpen, setCaseOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -301,6 +302,10 @@ function Editor({ me }) {
   };
 
   const saveDesign = async () => {
+    if (me?.role === 'viewer') {
+      flash('Demo mode — Save is disabled. Use Export PNG.');
+      return;
+    }
     const graph = { nodes, edges };
     try {
       if (currentId) {
@@ -449,6 +454,20 @@ function Editor({ me }) {
           onChange={(e) => setName(e.target.value)}
           placeholder="Design name"
         />
+        <div className="view-switch" role="tablist" aria-label="View">
+          <button
+            type="button"
+            className={view === 'management' ? 'active' : ''}
+            onClick={() => setView('management')}
+            title="Management view — clean, no IP / VLAN chrome"
+          >Management</button>
+          <button
+            type="button"
+            className={view === 'engineering' ? 'active' : ''}
+            onClick={() => setView('engineering')}
+            title="Engineering view — shows & edits IP, VLAN, hostname, protocol"
+          >Engineering</button>
+        </div>
         <div className="spacer" />
         <div className="menu">
           <button className="btn secondary" onClick={() => setTemplateOpen((v) => !v)}>
@@ -481,7 +500,7 @@ function Editor({ me }) {
         <button className="btn secondary" onClick={() => setCaseOpen(true)} title="Business case narrative">
           Case
         </button>
-        {currentId && (
+        {me?.role !== 'viewer' && currentId && (
           <button className="btn secondary" onClick={() => { setHistoryOpen(true); loadVersions(); }} title="Version history">
             History
           </button>
@@ -497,8 +516,10 @@ function Editor({ me }) {
         >
           🐞 Debug
         </button>
-        <button className="btn" onClick={saveDesign}>Save</button>
-        {currentId && <button className="btn danger" onClick={deleteDesign}>Delete</button>}
+        {me?.role !== 'viewer' && <button className="btn" onClick={saveDesign}>Save</button>}
+        {me?.role !== 'viewer' && currentId && (
+          <button className="btn danger" onClick={deleteDesign}>Delete</button>
+        )}
         {me?.role === 'admin' && (
           <a className="btn secondary" href="/admin" title="Admin portal">⚙︎ Admin</a>
         )}
@@ -559,7 +580,7 @@ function Editor({ me }) {
         ))}
       </aside>
 
-      <div className="canvas" ref={wrapperRef} onDrop={onDrop} onDragOver={onDragOver}>
+      <div className={`canvas view-${view}`} ref={wrapperRef} onDrop={onDrop} onDragOver={onDragOver}>
         <ReactFlow
           nodes={phasedNodes}
           edges={phasedEdges}
@@ -584,7 +605,16 @@ function Editor({ me }) {
           <MiniMap pannable zoomable maskColor="rgba(15,23,42,0.6)" />
           {debug && <DebugOverlay />}
         </ReactFlow>
-        {summary.deviceCount > 0 && summary.inputCount === 0 && (
+        {me?.role === 'viewer' && (
+          <div className="demo-banner" role="status">
+            <strong>Demo mode</strong>
+            <span>
+              Your account is <b>view-only</b>. You can build and explore templates, but
+              designs can't be saved here. Use <b>Export PNG</b> to keep your work.
+            </span>
+          </div>
+        )}
+        {me?.role !== 'viewer' && summary.deviceCount > 0 && summary.inputCount === 0 && (
           <div className="validation-banner" role="status">
             <strong>⚠︎ No input boundary</strong>
             <span>
@@ -607,6 +637,7 @@ function Editor({ me }) {
             {selectedNode && selectedNode.type === 'device' && (
               <NodeInspector
                 node={selectedNode}
+                view={view}
                 allDesigns={allDesigns}
                 currentId={currentId}
                 onChange={updateSelectedNode}
@@ -619,6 +650,7 @@ function Editor({ me }) {
             {selectedEdge && (
               <EdgeInspector
                 edge={selectedEdge}
+                view={view}
                 onChange={updateSelectedEdge}
                 onKindChange={changeEdgeKind}
                 onDelete={deleteSelected}
@@ -757,9 +789,10 @@ function SummaryPill({ summary }) {
   );
 }
 
-function NodeInspector({ node, allDesigns = [], currentId, onChange, onDelete }) {
+function NodeInspector({ node, view = 'management', allDesigns = [], currentId, onChange, onDelete }) {
   const d = node.data ?? {};
   const isBoundary = d.iconKey === 'boundary-input' || d.iconKey === 'boundary-output';
+  const engineer = view === 'engineering';
   const linkable = allDesigns.filter((x) => x.id !== currentId);
   return (
     <>
@@ -815,6 +848,49 @@ function NodeInspector({ node, allDesigns = [], currentId, onChange, onDelete })
             Lets readers jump from this boundary to the other side of the
             connection (e.g. Shop → HQ).
           </p>
+        </>
+      )}
+
+      {engineer && (
+        <>
+          <hr className="form-divider" />
+          <h2>Engineering</h2>
+          <label>Hostname</label>
+          <input
+            value={d.hostname ?? ''}
+            onChange={(e) => onChange({ hostname: e.target.value })}
+            placeholder="dc-wms-01"
+          />
+          <label>IP / subnet</label>
+          <input
+            value={d.ip ?? ''}
+            onChange={(e) => onChange({ ip: e.target.value })}
+            placeholder="10.20.30.10/24"
+          />
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <div>
+              <label>VLAN</label>
+              <input
+                value={d.vlan ?? ''}
+                onChange={(e) => onChange({ vlan: e.target.value })}
+                placeholder="10"
+              />
+            </div>
+            <div>
+              <label>OS / model</label>
+              <input
+                value={d.model ?? ''}
+                onChange={(e) => onChange({ model: e.target.value })}
+                placeholder="RHEL 9 / C9300"
+              />
+            </div>
+          </div>
+          <label>Notes</label>
+          <textarea
+            rows="3"
+            value={d.notes ?? ''}
+            onChange={(e) => onChange({ notes: e.target.value })}
+          />
         </>
       )}
 
@@ -891,9 +967,12 @@ function AnnotationInspector({ node, onChange, onDelete }) {
   );
 }
 
-function EdgeInspector({ edge, onChange, onKindChange, onDelete }) {
+function EdgeInspector({ edge, view = 'management', onChange, onKindChange, onDelete }) {
   const kindKey = edge.data?.kind ?? 'network';
   const kind = EDGE_KINDS_BY_KEY[kindKey] ?? EDGE_KINDS_BY_KEY.network ?? { description: '', stroke: '#94a3b8' };
+  const engineer = view === 'engineering';
+  const d = edge.data ?? {};
+  const setData = (patch) => onChange({ data: { ...d, ...patch } });
   return (
     <>
       <h2>Connection</h2>
@@ -925,6 +1004,37 @@ function EdgeInspector({ edge, onChange, onKindChange, onDelete }) {
         value={edge.style?.stroke ?? kind.stroke ?? '#94a3b8'}
         onChange={(e) => onChange({ style: { ...(edge.style ?? {}), stroke: e.target.value } })}
       />
+
+      {engineer && (
+        <>
+          <hr className="form-divider" />
+          <h2>Engineering</h2>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <div>
+              <label>Bandwidth</label>
+              <input
+                value={d.bandwidth ?? ''}
+                onChange={(e) => setData({ bandwidth: e.target.value })}
+                placeholder="1 Gbps"
+              />
+            </div>
+            <div>
+              <label>VLAN</label>
+              <input
+                value={d.vlan ?? ''}
+                onChange={(e) => setData({ vlan: e.target.value })}
+                placeholder="10"
+              />
+            </div>
+          </div>
+          <label>Protocol / notes</label>
+          <input
+            value={d.protocol ?? ''}
+            onChange={(e) => setData({ protocol: e.target.value })}
+            placeholder="OSPF · BGP · IPsec"
+          />
+        </>
+      )}
 
       <div style={{ height: 8 }} />
       <button className="btn danger" onClick={onDelete}>Delete connection</button>

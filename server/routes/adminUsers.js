@@ -12,6 +12,7 @@ function toPublic(r) {
     displayName: r.display_name,
     role: r.role,
     totpEnabled: r.totp_enabled,
+    defaultView: r.default_view,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
   };
@@ -34,7 +35,7 @@ adminUsersRouter.post('/', async (req, res, next) => {
     const { email, password, displayName, role = 'user' } = req.body ?? {};
     if (!email || !password) return res.status(400).json({ error: 'email and password required' });
     if (password.length < 8) return res.status(400).json({ error: 'password must be at least 8 characters' });
-    if (!['user', 'admin'].includes(role)) return res.status(400).json({ error: 'invalid role' });
+    if (!['user', 'admin', 'viewer'].includes(role)) return res.status(400).json({ error: 'invalid role' });
     const hash = await bcrypt.hash(password, 10);
     try {
       const { rows } = await pool.query(
@@ -53,18 +54,24 @@ adminUsersRouter.post('/', async (req, res, next) => {
 adminUsersRouter.patch('/:id', async (req, res, next) => {
   try {
     const id = Number(req.params.id);
-    const { displayName, role } = req.body ?? {};
+    const { displayName, role, defaultView } = req.body ?? {};
     const sets = [];
     const vals = [];
     if (displayName !== undefined) { sets.push(`display_name = $${sets.length + 2}`); vals.push(displayName); }
     if (role !== undefined) {
-      if (!['user', 'admin'].includes(role)) return res.status(400).json({ error: 'invalid role' });
+      if (!['user', 'admin', 'viewer'].includes(role)) return res.status(400).json({ error: 'invalid role' });
       // Prevent removing the last admin
       if (role !== 'admin') {
         const { rows } = await pool.query(`SELECT COUNT(*)::int AS n FROM users WHERE role = 'admin' AND id <> $1`, [id]);
         if (rows[0].n === 0) return res.status(400).json({ error: 'cannot demote the last admin' });
       }
       sets.push(`role = $${sets.length + 2}`); vals.push(role);
+    }
+    if (defaultView !== undefined) {
+      if (!['management', 'engineering'].includes(defaultView)) {
+        return res.status(400).json({ error: 'defaultView must be management or engineering' });
+      }
+      sets.push(`default_view = $${sets.length + 2}`); vals.push(defaultView);
     }
     if (!sets.length) return res.status(400).json({ error: 'no changes' });
     const { rows } = await pool.query(

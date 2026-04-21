@@ -6,6 +6,18 @@ export const designsRouter = Router();
 
 designsRouter.use(requireAuth);
 
+// Viewer role is a read-only / demo role: can load templates, build a
+// canvas, export PNGs, but cannot persist anything.
+function rejectViewerWrites(req, res, next) {
+  if (req.auth.user.role === 'viewer') {
+    return res.status(403).json({
+      error: 'demo mode — saving is disabled for viewer accounts. Use Export PNG to keep your work.',
+      code: 'VIEWER_READONLY',
+    });
+  }
+  next();
+}
+
 const EMPTY_GRAPH = { nodes: [], edges: [] };
 const MAX_VERSIONS = 50;
 
@@ -68,7 +80,7 @@ designsRouter.get('/:id', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-designsRouter.post('/', async (req, res, next) => {
+designsRouter.post('/', rejectViewerWrites, async (req, res, next) => {
   try {
     const { name, description = '', graph = EMPTY_GRAPH, narrative = {} } = req.body ?? {};
     if (!name || typeof name !== 'string') return res.status(400).json({ error: 'name is required' });
@@ -83,7 +95,7 @@ designsRouter.post('/', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-designsRouter.put('/:id', async (req, res, next) => {
+designsRouter.put('/:id', rejectViewerWrites, async (req, res, next) => {
   try {
     const chk = await canAccess(req.params.id, req.auth.user);
     if (chk.status !== 200) return res.status(chk.status).json({ error: 'not found' });
@@ -104,7 +116,7 @@ designsRouter.put('/:id', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-designsRouter.delete('/:id', async (req, res, next) => {
+designsRouter.delete('/:id', rejectViewerWrites, async (req, res, next) => {
   try {
     const chk = await canAccess(req.params.id, req.auth.user);
     if (chk.status !== 200) return res.status(chk.status).json({ error: 'not found' });
@@ -147,7 +159,7 @@ designsRouter.get('/:id/versions/:vid', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-designsRouter.post('/:id/versions/:vid/restore', async (req, res, next) => {
+designsRouter.post('/:id/versions/:vid/restore', rejectViewerWrites, async (req, res, next) => {
   try {
     const chk = await canAccess(req.params.id, req.auth.user);
     if (chk.status !== 200) return res.status(chk.status).json({ error: 'not found' });

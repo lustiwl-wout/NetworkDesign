@@ -23,10 +23,15 @@ export default function ProfilePage({ me, onChange }) {
             <h2>Account</h2>
             <p className="hint">
               {me.email}<br />
-              <strong>{me.role === 'admin' ? 'Administrator' : 'User'}</strong>
+              <strong>
+                {me.role === 'admin' ? 'Administrator'
+                  : me.role === 'viewer' ? 'Viewer (demo, no save)'
+                  : 'User'}
+              </strong>
             </p>
           </section>
 
+          <PreferencesSection me={me} onChange={onChange} onMessage={flash} onError={setErr} />
           <MfaSection me={me} onChange={onChange} onMessage={flash} onError={setErr} />
           <PasswordSection onMessage={flash} onError={setErr} />
 
@@ -35,6 +40,46 @@ export default function ProfilePage({ me, onChange }) {
         </div>
       </main>
     </div>
+  );
+}
+
+function PreferencesSection({ me, onChange, onMessage, onError }) {
+  const [view, setView] = useState(me.defaultView ?? 'management');
+  const [busy, setBusy] = useState(false);
+
+  const save = async (next) => {
+    onError(null);
+    setBusy(true);
+    try {
+      await authApi.updatePreferences({ defaultView: next });
+      setView(next);
+      onMessage(next === 'engineering'
+        ? 'Default view set to Engineering'
+        : 'Default view set to Management');
+      if (onChange) onChange();
+    } catch (e) { onError(e.message); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <section className="admin-form">
+      <h2>Preferences</h2>
+      <p className="hint">
+        Pick the view you open the editor in. Management is clean and
+        business-focused; Engineering exposes IP addresses, VLANs,
+        hostnames and protocols. You can still toggle per-session in the
+        topbar.
+      </p>
+      <label>Default view</label>
+      <select
+        value={view}
+        onChange={(e) => save(e.target.value)}
+        disabled={busy}
+      >
+        <option value="management">Management</option>
+        <option value="engineering">Engineering</option>
+      </select>
+    </section>
   );
 }
 

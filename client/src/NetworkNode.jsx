@@ -54,6 +54,14 @@ export default function NetworkNode({ data, selected }) {
       <div className="icon-wrap"><DeviceIcon iconKey={iconKey} size={72} /></div>
       <div className="label">{data?.label ?? 'Device'}</div>
       {data?.capacity && <div className="sub">{data.capacity}</div>}
+
+      {/* Engineering details — shown only when canvas has view-engineering */}
+      <div className="engineering-only sub-tech">
+        {data?.hostname && <div>{data.hostname}</div>}
+        {data?.ip       && <div>{data.ip}</div>}
+        {data?.vlan     && <div>VLAN {data.vlan}</div>}
+        {data?.model    && <div>{data.model}</div>}
+      </div>
     </div>
   );
 }
