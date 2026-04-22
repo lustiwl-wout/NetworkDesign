@@ -112,8 +112,23 @@ export function computeGuides(draggedId, nodes, overrides = null) {
   const a = bounds(dragged, absIndex.get(dragged.id));
   if (!a) return [];
 
+  // Only compare against nodes it makes sense to align with. Rules:
+  //   * Same type only (device↔device, zone↔zone).
+  //     A device lining up with a zone's edge or label is
+  //     accidental, not intentional.
+  //   * Skip annotation nodes — free-text markers aren't layout
+  //     anchors.
+  //   * Skip the dragged node's ancestors / descendants, so a
+  //     device dragged inside a zone doesn't show a guide against
+  //     its own parent.
+  const ancestorIds = ancestorsOf(dragged, nodes);
+  const descendantIds = descendantsOf(dragged.id, nodes);
   const others = nodes
-    .map((n) => (n.id === draggedId ? null : bounds(n, absIndex.get(n.id))))
+    .filter((n) => n.id !== draggedId)
+    .filter((n) => n.type !== 'annotation' && dragged.type !== 'annotation')
+    .filter((n) => n.type === dragged.type)
+    .filter((n) => !ancestorIds.has(n.id) && !descendantIds.has(n.id))
+    .map((n) => bounds(n, absIndex.get(n.id)))
     .filter(Boolean);
 
   const out = [];
@@ -195,6 +210,34 @@ function bounds(n, absPos) {
   const l = p.x;
   const t = p.y;
   return { l, t, r: l + w, b: t + h, cx: l + w / 2, cy: t + h / 2 };
+}
+
+function ancestorsOf(node, allNodes) {
+  const ids = new Set();
+  let parentId = node.parentNode;
+  while (parentId && !ids.has(parentId)) {
+    ids.add(parentId);
+    const p = allNodes.find((n) => n.id === parentId);
+    if (!p) break;
+    parentId = p.parentNode;
+  }
+  return ids;
+}
+
+function descendantsOf(rootId, allNodes) {
+  const ids = new Set();
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const n of allNodes) {
+      if (ids.has(n.id)) continue;
+      if (n.parentNode === rootId || (n.parentNode && ids.has(n.parentNode))) {
+        ids.add(n.id);
+        grew = true;
+      }
+    }
+  }
+  return ids;
 }
 
 // Walk parentNode chain to compute a node's position in flow coords.
