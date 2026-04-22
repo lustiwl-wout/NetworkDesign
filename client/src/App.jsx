@@ -68,8 +68,7 @@ function WaypointDebug() {
     const t = setInterval(() => setTick((v) => v + 1), 250);
     return () => clearInterval(t);
   }, []);
-  const down = typeof window !== 'undefined' ? (window.__wpDownDbg ?? 0) : 0;
-  const move = typeof window !== 'undefined' ? (window.__wpDbg ?? 0) : 0;
+  const w = typeof window !== 'undefined' ? window : {};
   return (
     <div style={{
       position: 'absolute', right: 8, bottom: 8, zIndex: 50,
@@ -77,7 +76,7 @@ function WaypointDebug() {
       background: 'rgba(0,0,0,0.6)', color: '#fff',
       fontSize: 11, fontFamily: 'monospace', pointerEvents: 'none',
     }}>
-      wp: down={down} move={move}
+      down={w.__wpDownDbg ?? 0} move={w.__wpDbg ?? 0} add={w.__wpAdd ?? 0} upd={w.__wpUpd ?? 0} seBad={w.__wpSeBad ?? 0} edgeRender={w.__wpEdgeRender ?? 0} wps={w.__wpEdgeWps ?? 0}
     </div>
   );
 }

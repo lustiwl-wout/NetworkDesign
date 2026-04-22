@@ -102,6 +102,10 @@ export default function SmartEdge(props) {
     x: Math.round(p.x / 10) * 10,
     y: Math.round(p.y / 10) * 10,
   }));
+  if (typeof window !== 'undefined') {
+    window.__wpEdgeRender = (window.__wpEdgeRender ?? 0) + 1;
+    window.__wpEdgeWps = waypoints.length;
+  }
   const stops = [ss, ...waypoints, ts];
   const legs = [];
   for (let i = 0; i < stops.length - 1; i++) {
@@ -247,6 +251,10 @@ function SegmentHandle({ edgeId, seg, selected }) {
       if (!pt || !Number.isFinite(pt.x) || !Number.isFinite(pt.y)) return;
       const newPt = { x: snap(pt.x), y: snap(pt.y) };
       window.__wpDbg = (window.__wpDbg ?? 0) + 1;
+      if (typeof se !== 'function') {
+        window.__wpSeBad = (window.__wpSeBad ?? 0) + 1;
+        return;
+      }
       se((eds) => eds.map((ed) => {
         if (ed.id !== eid) return ed;
         const wps = [...(ed.data?.waypoints ?? [])];
@@ -259,10 +267,12 @@ function SegmentHandle({ edgeId, seg, selected }) {
           } else {
             wps.push(newPt);
             ownedIdx = wps.length - 1;
+            window.__wpAdd = (window.__wpAdd ?? 0) + 1;
             return { ...ed, data: { ...(ed.data ?? {}), waypoints: wps } };
           }
         }
         wps[ownedIdx] = newPt;
+        window.__wpUpd = (window.__wpUpd ?? 0) + 1;
         return { ...ed, data: { ...(ed.data ?? {}), waypoints: wps } };
       }));
     };
