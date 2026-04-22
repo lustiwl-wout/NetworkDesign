@@ -1316,24 +1316,27 @@ html, body, #root {
 .sec-label { font-size: 13px; font-weight: 600; color: var(--text); }
 .sec-sub   { font-size: 11px; color: var(--muted); margin-top: 2px; line-height: 1.4; }
 
-/* Role pill in users admin */
+/* Role pill in users admin. inline-block + padding-based sizing so
+   the pill never inherits a stretched height from its table cell
+   (inline-flex + fixed height was rendering as a full-column-tall
+   ellipse in some table layouts). max-height is a hard safety
+   cap. */
 .role-pill {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 20px;
+  display: inline-block;
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  padding: 0 10px;
+  padding: 3px 10px;
   border-radius: 999px;
   background: var(--panel-2);
   color: var(--muted);
   border: 1px solid var(--border);
-  line-height: 1;
+  line-height: 1.3;
   white-space: nowrap;
   vertical-align: middle;
+  max-height: 22px;
+  box-sizing: border-box;
 }
 .role-pill.admin  { background: rgba(56, 189, 248, 0.15); color: var(--accent); border-color: var(--accent); }
 .role-pill.viewer { background: rgba(148, 163, 184, 0.1);  color: #cbd5e1;       border-color: #475569; }
@@ -1426,7 +1429,13 @@ html, body, #root {
 }
 .admin-list .sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
 .admin-list .empty { text-align: center; color: var(--muted); padding: 24px; }
-.admin-list .row-actions { display: flex; gap: 6px; justify-content: flex-end; }
+/* Row actions: keep the <td> as a proper table cell (display: flex
+   on a td breaks table layout in some browsers and lets children
+   escape to unexpected positions); use text-align + inline-flex
+   for the inner gap instead. */
+.admin-list .row-actions { text-align: right; white-space: nowrap; }
+.admin-list .row-actions > * { margin-left: 6px; }
+.admin-list .row-actions > *:first-child { margin-left: 0; }
 
 .admin-form {
   background: var(--panel);
