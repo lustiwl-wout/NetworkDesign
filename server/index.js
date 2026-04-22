@@ -15,7 +15,12 @@ import { pool } from './db/pool.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 
-app.set('trust proxy', 1); // secure cookies behind Render's proxy
+// Trust every proxy hop in front of us so req.ip reflects the
+// actual client (the leftmost X-Forwarded-For entry). Render's
+// routing can add more than one hop, so `1` was too conservative.
+// Safe here because only Render's infrastructure can inject this
+// header — the service isn't reachable directly.
+app.set('trust proxy', true);
 app.use(cors({ credentials: true }));
 app.use(cookieParser());
 app.use(express.json({ limit: '2mb' }));

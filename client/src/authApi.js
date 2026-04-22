@@ -58,7 +58,8 @@ async function visitsReq(path, options = {}) {
   return res.json();
 }
 export const visitsAdminApi = {
-  list: () => visitsReq(''),
+  list:  () => visitsReq(''),
+  clear: () => visitsReq('', { method: 'DELETE' }),
 };
 
 export const usersAdminApi = {

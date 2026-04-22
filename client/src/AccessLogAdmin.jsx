@@ -21,12 +21,25 @@ export default function AccessLogAdmin() {
   };
   useEffect(() => { load(); }, []);
 
+  const clearAll = async () => {
+    if (!confirm('Delete every row in the access log? This cannot be undone.')) return;
+    try {
+      await visitsAdminApi.clear();
+      await load();
+    } catch (e) { setErr(e.message); }
+  };
+
   return (
     <div className="admin-grid">
       <section className="admin-list">
         <div className="admin-list-header">
           <h2>Access log</h2>
-          <button className="btn secondary small" onClick={load}>Refresh</button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn secondary small" onClick={load}>Refresh</button>
+            <button className="btn danger small" onClick={clearAll} disabled={!items.length}>
+              Clear log
+            </button>
+          </div>
         </div>
         {err && <div className="admin-error">{err}</div>}
         {loading && items.length === 0 && <div className="hint">Loading…</div>}
