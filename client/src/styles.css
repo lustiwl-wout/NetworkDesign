@@ -17,6 +17,11 @@
   --node-bg: #1e293b;
   --floating-bg: rgba(15, 23, 42, 0.92);
   --grid: #334155;
+
+  /* Text colour that sits on top of --accent (primary buttons,
+     active pills). Near-black reads on the Dark/Light cyan; the
+     Professional theme overrides to white for its deep-navy. */
+  --on-accent: #081824;
 }
 
 html.theme-light {
@@ -60,6 +65,9 @@ html.theme-professional {
   --grid: #e5e7eb;
   --icon-line: #1f2937;
   --annotation-body: #1f2937;
+  /* Deep-navy accent needs white text on top, not the default
+     near-black the other themes use. */
+  --on-accent: #ffffff;
 }
 
 /* --- Devices ------------------------------------------------------ */
@@ -110,13 +118,6 @@ html.theme-professional .zone-header {
 
 /* --- Grid --------------------------------------------------------- */
 html.theme-professional .react-flow__background { opacity: 0.4; }
-
-/* The view switch's "active" pill uses --accent, which in
-   Professional is a very dark navy. Dark text on dark navy is
-   unreadable, so we force the pill to read white-on-navy here. */
-html.theme-professional .view-switch button.active {
-  color: #ffffff;
-}
 
 * { box-sizing: border-box; }
 
@@ -194,7 +195,7 @@ html, body, #root {
 
 .btn {
   background: var(--accent);
-  color: #081824;
+  color: var(--on-accent);
   border: none;
   padding: 6px 12px;
   border-radius: 6px;
@@ -323,7 +324,7 @@ html, body, #root {
   cursor: pointer;
 }
 .view-switch button:hover { color: var(--text); }
-.view-switch button.active { background: var(--accent); color: #081824; }
+.view-switch button.active { background: var(--accent); color: var(--on-accent); }
 
 /* Engineering-only chrome on device nodes */
 .canvas.view-management .engineering-only { display: none !important; }
