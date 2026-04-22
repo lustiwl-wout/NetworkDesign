@@ -67,6 +67,36 @@ function Editor({ me }) {
   const [theme, setTheme] = useTheme();
   const [nodes, setNodes, onNodesChangeRaw] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+
+  // Undo stack. Each entry is a deep-ish snapshot of nodes+edges;
+  // we push BEFORE a discrete user action (drop, connect, delete,
+  // drag-start, property change, bend-drag-start) so Ctrl+Z restores
+  // the state as it was right before that action.
+  const historyRef = useRef([]);
+  const HISTORY_MAX = 50;
+  const nodesRef = useRef(nodes);
+  const edgesRef = useRef(edges);
+  nodesRef.current = nodes;
+  edgesRef.current = edges;
+  const takeSnapshot = useCallback(() => {
+    historyRef.current.push({
+      nodes: JSON.parse(JSON.stringify(nodesRef.current)),
+      edges: JSON.parse(JSON.stringify(edgesRef.current)),
+    });
+    if (historyRef.current.length > HISTORY_MAX) historyRef.current.shift();
+  }, []);
+  const undo = useCallback(() => {
+    const prev = historyRef.current.pop();
+    if (!prev) return;
+    setNodes(prev.nodes);
+    setEdges(prev.edges);
+  }, [setNodes, setEdges]);
+
+  // Clipboard for copy/paste. Keeps whatever was selected last time
+  // Ctrl+C fired plus the edges strictly between those nodes, with
+  // positions preserved relative to a reference point so paste can
+  // offset predictably.
+  const clipboardRef = useRef(null);
   // nodeId -> { cx, cy } in flow coords. Populated when a user drops a
   // palette item; consumed once the node's real dimensions are measured,
   // then the node is re-centred exactly on the cursor.
@@ -191,6 +221,7 @@ function Editor({ me }) {
     // anchors on the same side (e.g. OOB + Network link). When null
     // (programmatic or drag from the card body), the edge falls back
     // to the floating side-midpoint behaviour.
+    takeSnapshot();
     const edge = applyKind({
       id: `e_${Date.now().toString(36)}_${tmpId++}`,
       source: params.source,
@@ -200,7 +231,7 @@ function Editor({ me }) {
       type: 'smart',
     }, 'network');
     setEdges((eds) => addEdge(edge, eds));
-  }, [setEdges]);
+  }, [setEdges, takeSnapshot]);
 
   const onDragOver = useCallback((event) => {
     event.preventDefault();
@@ -212,6 +243,7 @@ function Editor({ me }) {
       event.preventDefault();
       const raw = event.dataTransfer.getData('application/reactflow');
       if (!raw) return;
+      takeSnapshot();
       const { kind, value } = JSON.parse(raw);
       const cursor = screenToFlowPosition({ x: event.clientX, y: event.clientY });
 
@@ -289,7 +321,7 @@ function Editor({ me }) {
         }));
       }
     },
-    [screenToFlowPosition, setNodes, deviceByKey, zoneByKey, nodes]
+    [screenToFlowPosition, setNodes, deviceByKey, zoneByKey, nodes, takeSnapshot]
   );
 
   const onPaletteDragStart = (event, kind, value) => {
@@ -361,6 +393,25 @@ function Editor({ me }) {
     } catch (e) { flash(`Save failed: ${e.message}`); }
   };
 
+  // Save the current canvas as a brand-new design, keeping the
+  // current working copy pointed at the duplicate (so further Save
+  // operations land on the copy, not the original).
+  const duplicateDesign = async () => {
+    if (!canSave) {
+      flash('Demo mode — Duplicate is disabled.');
+      return;
+    }
+    const suggested = `Copy of ${name}`.slice(0, 120);
+    const newName = prompt('Name for the duplicate?', suggested);
+    if (!newName) return;
+    try {
+      const d = await api.create({ name: newName.trim(), graph: { nodes, edges } });
+      setCurrentId(d.id);
+      setName(d.name);
+      flash(`Created "${d.name}"`);
+    } catch (e) { flash(`Duplicate failed: ${e.message}`); }
+  };
+
   const loadVersions = useCallback(async () => {
     if (!currentId) { setVersions([]); return; }
     try { setVersions(await api.versions(currentId)); }
@@ -400,6 +451,7 @@ function Editor({ me }) {
 
   const updateSelectedNode = (patch) => {
     if (!selectedNode) return;
+    takeSnapshot();
     setNodes((nds) =>
       nds.map((n) => (n.id === selectedNode.id ? { ...n, data: { ...n.data, ...patch } } : n))
     );
@@ -408,26 +460,104 @@ function Editor({ me }) {
 
   const updateSelectedEdge = (patch) => {
     if (!selectedEdge) return;
+    takeSnapshot();
     setEdges((eds) => eds.map((e) => (e.id === selectedEdge.id ? { ...e, ...patch } : e)));
     setSelectedEdge((e) => ({ ...e, ...patch }));
   };
 
   const changeEdgeKind = (kindKey) => {
     if (!selectedEdge) return;
+    takeSnapshot();
     setEdges((eds) => eds.map((e) => (e.id === selectedEdge.id ? applyKind(e, kindKey) : e)));
     setSelectedEdge((e) => applyKind(e, kindKey));
   };
 
   const deleteSelected = () => {
     if (selectedNode) {
+      takeSnapshot();
       setNodes((nds) => nds.filter((n) => n.id !== selectedNode.id));
       setEdges((eds) => eds.filter((e) => e.source !== selectedNode.id && e.target !== selectedNode.id));
       setSelectedNode(null);
     } else if (selectedEdge) {
+      takeSnapshot();
       setEdges((eds) => eds.filter((e) => e.id !== selectedEdge.id));
       setSelectedEdge(null);
     }
   };
+
+  // --- Copy / paste ---
+  // Copy: grab everything currently selected (React Flow flags them
+  // with selected=true), plus the edges whose endpoints are both in
+  // the selection. We store a deep copy so later mutations don't
+  // bleed into the clipboard.
+  const copySelection = useCallback(() => {
+    const selNodes = nodesRef.current.filter((n) => n.selected);
+    if (!selNodes.length) return;
+    const ids = new Set(selNodes.map((n) => n.id));
+    const selEdges = edgesRef.current.filter((e) => ids.has(e.source) && ids.has(e.target));
+    clipboardRef.current = JSON.parse(JSON.stringify({ nodes: selNodes, edges: selEdges }));
+    flash(`Copied ${selNodes.length} node${selNodes.length === 1 ? '' : 's'}`);
+  }, []);
+
+  const pasteClipboard = useCallback(() => {
+    const clip = clipboardRef.current;
+    if (!clip || !clip.nodes.length) return;
+    takeSnapshot();
+    // Fresh IDs; keep internal edge connections wired up via a map.
+    const idMap = new Map();
+    const pastedNodes = clip.nodes.map((n) => {
+      const newId = nextId();
+      idMap.set(n.id, newId);
+      return {
+        ...n,
+        id: newId,
+        selected: true,
+        position: { x: n.position.x + 24, y: n.position.y + 24 },
+        // Drop the parentNode link unless the parent was also copied.
+        parentNode: n.parentNode && idMap.has(n.parentNode) ? idMap.get(n.parentNode) : undefined,
+      };
+    });
+    const pastedEdges = clip.edges.map((e) => ({
+      ...e,
+      id: `e_${Date.now().toString(36)}_${tmpId++}`,
+      source: idMap.get(e.source),
+      target: idMap.get(e.target),
+      selected: true,
+    }));
+    setNodes((nds) => nds.map((n) => ({ ...n, selected: false })).concat(pastedNodes));
+    setEdges((eds) => eds.map((e) => ({ ...e, selected: false })).concat(pastedEdges));
+    flash(`Pasted ${pastedNodes.length} node${pastedNodes.length === 1 ? '' : 's'}`);
+  }, [setNodes, setEdges, takeSnapshot]);
+
+  // Global keyboard shortcuts. Ignored while the user is typing in a
+  // text field — otherwise Ctrl+Z inside, say, the node name input
+  // would yank the whole canvas back.
+  useEffect(() => {
+    const onKey = (e) => {
+      const ctrl = e.ctrlKey || e.metaKey;
+      if (!ctrl) return;
+      const target = e.target;
+      const tag = target?.tagName;
+      const typing = tag === 'INPUT' || tag === 'TEXTAREA' ||
+                     tag === 'SELECT' || target?.isContentEditable;
+      if (typing) return;
+      const key = e.key.toLowerCase();
+      if (key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        undo();
+      } else if (key === 'c') {
+        copySelection();
+        // Don't preventDefault — user may legitimately want to copy
+        // text selected elsewhere; but selection here takes priority
+        // only when focus is on the canvas.
+      } else if (key === 'v') {
+        e.preventDefault();
+        pasteClipboard();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [undo, copySelection, pasteClipboard]);
 
   // Build the sorted set of phase values present in the design
   const phaseOptions = useMemo(() => {
@@ -575,6 +705,11 @@ function Editor({ me }) {
         </button>
         {canSave && <button className="btn" onClick={saveDesign}>Save</button>}
         {canSave && currentId && (
+          <button className="btn secondary" onClick={duplicateDesign} title="Save this design as a new one">
+            Duplicate
+          </button>
+        )}
+        {canSave && currentId && (
           <button className="btn danger" onClick={deleteDesign}>Delete</button>
         )}
         {isAdmin && (
@@ -642,13 +777,14 @@ function Editor({ me }) {
       </aside>
 
       <div className={`canvas view-${view}`} ref={wrapperRef} onDrop={onDrop} onDragOver={onDragOver}>
-        <EditorCtx.Provider value={{ setEdges }}>
+        <EditorCtx.Provider value={{ setEdges, takeSnapshot }}>
         <ReactFlow
           nodes={phasedNodes}
           edges={phasedEdges}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
+          onNodeDragStart={takeSnapshot}
           onNodeClick={(_, node) => { setSelectedNode(node); setSelectedEdge(null); }}
           onEdgeClick={(_, edge) => { setSelectedEdge(edge); setSelectedNode(null); }}
           onNodeDragStop={onNodeDragStop}

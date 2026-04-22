@@ -163,9 +163,9 @@ function axisOfSide(side) {
 function BendHandle({ edgeId, middle }) {
   const ref = useRef(null);
   const { screenToFlowPosition } = useReactFlow();
-  const { setEdges } = useContext(EditorCtx);
-  const state = useRef({ edgeId, middle, setEdges, screenToFlowPosition });
-  state.current = { edgeId, middle, setEdges, screenToFlowPosition };
+  const { setEdges, takeSnapshot } = useContext(EditorCtx);
+  const state = useRef({ edgeId, middle, setEdges, screenToFlowPosition, takeSnapshot });
+  state.current = { edgeId, middle, setEdges, screenToFlowPosition, takeSnapshot };
 
   useEffect(() => {
     const el = ref.current;
@@ -177,6 +177,7 @@ function BendHandle({ edgeId, middle }) {
       e.preventDefault();
       e.stopPropagation();
       activePointer = e.pointerId;
+      state.current.takeSnapshot?.();
       try { el.setPointerCapture(e.pointerId); } catch {}
     };
     const onMove = (e) => {
