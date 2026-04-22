@@ -1,5 +1,7 @@
-import { useContext, useMemo, useRef } from 'react';
+import { useContext, useEffect, useMemo, useRef } from 'react';
 import { useStore, useReactFlow, EdgeLabelRenderer, Position } from 'reactflow';
+import { drag as d3Drag } from 'd3-drag';
+import { select as d3Select } from 'd3-selection';
 import { EditorCtx } from './EditorCtx.js';
 
 // Custom orthogonal router. Built from scratch because every off-the-
@@ -199,10 +201,6 @@ export default function SmartEdge(props) {
 // the line through the cursor: first drag creates a waypoint; the same
 // segment's handle on later drags reuses the waypoint near it.
 function SegmentHandles({ edgeId, points, selected }) {
-  const { screenToFlowPosition } = useReactFlow();
-  const { setEdges } = useContext(EditorCtx);
-  const snap = (v) => Math.round(v / 10) * 10;
-
   // Pre-compute each segment's midpoint, skipping tiny ones so handles
   // don't pile up near corners.
   const segments = useMemo(() => {
@@ -219,115 +217,78 @@ function SegmentHandles({ edgeId, points, selected }) {
     return segs;
   }, [points]);
 
-  // Classic mousedown → document-level move/up pattern. React Flow's
-  // pan handler is bypassed via the 'nopan' / 'nodrag' classes and
-  // stopPropagation. Much more reliable than pointer capture here.
-  const startDrag = (e, seg) => {
-    e.stopPropagation();
-    e.preventDefault();
-    const ownedIdxRef = { current: null };
-
-    const onMove = (ev) => {
-      try {
-        const pt = screenToFlowPosition({ x: ev.clientX, y: ev.clientY });
-        const newPt = { x: snap(pt.x), y: snap(pt.y) };
-        setEdges((eds) => eds.map((ed) => {
-          if (ed.id !== edgeId) return ed;
-          const wps = [...(ed.data?.waypoints ?? [])];
-          if (ownedIdxRef.current === null) {
-            const j = wps.findIndex((w) =>
-              Math.abs(w.x - seg.mid.x) + Math.abs(w.y - seg.mid.y) < 60
-            );
-            if (j >= 0) {
-              ownedIdxRef.current = j;
-            } else {
-              wps.push(newPt);
-              ownedIdxRef.current = wps.length - 1;
-              return { ...ed, data: { ...(ed.data ?? {}), waypoints: wps } };
-            }
-          }
-          wps[ownedIdxRef.current] = newPt;
-          return { ...ed, data: { ...(ed.data ?? {}), waypoints: wps } };
-        }));
-      } catch {}
-    };
-    const onUp = () => {
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
-    };
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
-  };
-
   return segments.map((seg, i) => (
-    <div
-      key={i}
-      className={`edge-waypoint nodrag nopan${selected ? ' edge-waypoint--active' : ''} ${seg.horizontal ? 'h' : 'v'}`}
-      style={{ transform: `translate(-50%, -50%) translate(${seg.mid.x}px, ${seg.mid.y}px)` }}
-      onMouseDown={(e) => startDrag(e, seg)}
-      title="Drag to reshape the line"
-    />
+    <SegmentHandle key={i} edgeId={edgeId} seg={seg} selected={selected} />
   ));
 }
 
-function WaypointHandles({ edgeId, waypoints }) {
+// Single waypoint square. We reuse the same drag primitive that
+// React Flow's NodeResizer uses under the hood (d3-drag): it takes
+// care of pointer capture, cross-browser touch/pen support, and —
+// crucially — cooperates with React Flow's own d3-zoom on the pane
+// so the canvas doesn't pan while we're dragging a handle.
+function SegmentHandle({ edgeId, seg, selected }) {
+  const ref = useRef(null);
   const { screenToFlowPosition } = useReactFlow();
   const { setEdges } = useContext(EditorCtx);
-  const snap = (v) => Math.round(v / 10) * 10;
 
-  const update = (i, point) => {
-    setEdges((eds) => eds.map((e) => {
-      if (e.id !== edgeId) return e;
-      const wps = [...(e.data?.waypoints ?? [])];
-      wps[i] = point;
-      return { ...e, data: { ...(e.data ?? {}), waypoints: wps } };
-    }));
-  };
-  const remove = (i) => {
-    setEdges((eds) => eds.map((e) => {
-      if (e.id !== edgeId) return e;
-      const wps = (e.data?.waypoints ?? []).filter((_, j) => j !== i);
-      return { ...e, data: { ...(e.data ?? {}), waypoints: wps } };
-    }));
-  };
+  const liveRef = useRef({ seg, screenToFlowPosition, setEdges, edgeId });
+  liveRef.current = { seg, screenToFlowPosition, setEdges, edgeId };
 
-  // Pointer capture: once the element has the pointer, every further
-  // move / up fires on it, regardless of whether the cursor wanders
-  // off. Works across mouse, touch and pen; prevents React Flow's
-  // pan handler from ever seeing the drag.
-  const startDrag = (e, i) => {
-    e.stopPropagation();
-    e.preventDefault();
-    const el = e.currentTarget;
-    const pointerId = e.pointerId;
-    try { el.setPointerCapture?.(pointerId); } catch {}
-    const onMove = (ev) => {
-      try {
-        const pt = screenToFlowPosition({ x: ev.clientX, y: ev.clientY });
-        update(i, { x: snap(pt.x), y: snap(pt.y) });
-      } catch {}
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const snap = (v) => Math.round(v / 10) * 10;
+    let ownedIdx = null;
+    let startMid = null;
+
+    const handler = d3Drag()
+      .filter((event) => !event.button || event.button === 0)
+      .on('start', () => {
+        ownedIdx = null;
+        startMid = { x: liveRef.current.seg.mid.x, y: liveRef.current.seg.mid.y };
+      })
+      .on('drag', (event) => {
+        const src = event.sourceEvent;
+        const cx = src.clientX ?? (src.touches?.[0]?.clientX ?? 0);
+        const cy = src.clientY ?? (src.touches?.[0]?.clientY ?? 0);
+        const { screenToFlowPosition: s2f, setEdges: se, edgeId: eid } = liveRef.current;
+        const pt = s2f({ x: cx, y: cy });
+        const newPt = { x: snap(pt.x), y: snap(pt.y) };
+        se((eds) => eds.map((ed) => {
+          if (ed.id !== eid) return ed;
+          const wps = [...(ed.data?.waypoints ?? [])];
+          if (ownedIdx === null) {
+            const j = wps.findIndex((w) =>
+              Math.abs(w.x - startMid.x) + Math.abs(w.y - startMid.y) < 80
+            );
+            if (j >= 0) {
+              ownedIdx = j;
+            } else {
+              wps.push(newPt);
+              ownedIdx = wps.length - 1;
+              return { ...ed, data: { ...(ed.data ?? {}), waypoints: wps } };
+            }
+          }
+          wps[ownedIdx] = newPt;
+          return { ...ed, data: { ...(ed.data ?? {}), waypoints: wps } };
+        }));
+      });
+
+    d3Select(el).call(handler);
+    return () => {
+      d3Select(el).on('.drag', null);
     };
-    const onUp = () => {
-      try { el.releasePointerCapture?.(pointerId); } catch {}
-      el.removeEventListener('pointermove', onMove);
-      el.removeEventListener('pointerup', onUp);
-      el.removeEventListener('pointercancel', onUp);
-    };
-    el.addEventListener('pointermove', onMove);
-    el.addEventListener('pointerup', onUp);
-    el.addEventListener('pointercancel', onUp);
-  };
+  }, []);
 
-  return waypoints.map((p, i) => (
+  return (
     <div
-      key={i}
-      className="edge-waypoint"
-      style={{ transform: `translate(-50%, -50%) translate(${p.x}px, ${p.y}px)` }}
-      onPointerDown={(e) => startDrag(e, i)}
-      onDoubleClick={(e) => { e.stopPropagation(); remove(i); }}
-      title="Drag to move · double-click to remove"
+      ref={ref}
+      className={`edge-waypoint nodrag nopan${selected ? ' edge-waypoint--active' : ''} ${seg.horizontal ? 'h' : 'v'}`}
+      style={{ transform: `translate(-50%, -50%) translate(${seg.mid.x}px, ${seg.mid.y}px)`, touchAction: 'none' }}
+      title="Drag to reshape the line"
     />
-  ));
+  );
 }
 
 function polylineLength(points) {
