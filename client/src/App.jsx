@@ -60,27 +60,6 @@ function styleEdges(edges) {
   });
 }
 
-// TEMP debug: shows how many waypoint pointerdown / drag events fired.
-// Remove once drag is confirmed working end-to-end.
-function WaypointDebug() {
-  const [tick, setTick] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => setTick((v) => v + 1), 250);
-    return () => clearInterval(t);
-  }, []);
-  const w = typeof window !== 'undefined' ? window : {};
-  return (
-    <div style={{
-      position: 'absolute', right: 8, bottom: 8, zIndex: 50,
-      padding: '4px 8px', borderRadius: 6,
-      background: 'rgba(0,0,0,0.6)', color: '#fff',
-      fontSize: 11, fontFamily: 'monospace', userSelect: 'text', cursor: 'text',
-    }}>
-      down={w.__wpDownDbg ?? 0} move={w.__wpDbg ?? 0} add={w.__wpAdd ?? 0} upd={w.__wpUpd ?? 0} seBad={w.__wpSeBad ?? 0} edgeRender={w.__wpEdgeRender ?? 0} wps={w.__wpEdgeWps ?? 0}
-    </div>
-  );
-}
-
 function Editor({ me }) {
   // Write access: logged in as user or admin (but not the view-only "viewer" role).
   const canSave = !!me && me.role !== 'viewer';
@@ -692,7 +671,6 @@ function Editor({ me }) {
           <MiniMap pannable zoomable maskColor="rgba(15,23,42,0.6)" />
         </ReactFlow>
         </EditorCtx.Provider>
-        <WaypointDebug />
         {!canSave && (
           <div className="demo-banner" role="status">
             <strong>{me ? 'Demo account' : 'Guest mode'}</strong>

@@ -1483,6 +1483,16 @@ html, body, #root {
 .edge-waypoint--active { opacity: 1; }
 .edge-waypoint:hover { background: var(--accent); }
 .edge-waypoint:active { cursor: grabbing; }
+/* Existing waypoint = filled square so it reads as "a thing you
+   placed" rather than "an invitation to create". Cursor is a move
+   cursor because there's no one axis to suggest. */
+.edge-waypoint--placed {
+  background: var(--accent);
+  opacity: 0.85;
+  cursor: grab;
+}
+.edge-waypoint--placed:hover { opacity: 1; }
+.edge-waypoint--placed:active { cursor: grabbing; }
 /* Hide during presentation / export. */
 .app.presenting .edge-waypoint,
 .exporting .edge-waypoint { display: none !important; }

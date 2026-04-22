@@ -1,32 +1,32 @@
-import { useContext, useEffect, useMemo, useRef } from 'react';
+import { useContext, useEffect, useRef } from 'react';
 import { useStore, useReactFlow, EdgeLabelRenderer, Position } from 'reactflow';
 import { EditorCtx } from './EditorCtx.js';
 
-// Custom orthogonal router. Built from scratch because every off-the-
-// shelf option we tried either produced diagonals at the endpoints or
-// let lines pass through non-endpoint nodes / zones.
+// Custom orthogonal edge.
 //
-// Guarantees (by construction):
-//   * Every segment is horizontal or vertical. No diagonals anywhere.
-//   * Lines route around EVERY other node (both devices and zones).
-//   * Endpoints always leave the node perpendicular to the side that
-//     faces the other endpoint (via a short stub), so the first and
-//     last segments are axis-aligned.
-//   * On failure (truly impossible layout) we draw a visibly broken
-//     warning edge rather than silently cut through a node.
+// Routing: the line exits each node perpendicular to the anchor side
+// (via a short stub), passes through any user-placed waypoints in
+// order, and enters the target perpendicular to its anchor side.
+// Between consecutive stops we use at most one 90° elbow, so the
+// shape always stays simple and predictable. There's no automatic
+// obstacle avoidance — if the line crosses something you don't
+// want it to, drop a waypoint and the user stays fully in control.
+//
+// Two kinds of handles appear on every edge:
+//   * A small open square at the midpoint of each leg. Dragging
+//     one creates a new waypoint at that spot and lets you shape
+//     the leg into two.
+//   * A filled square at every existing waypoint. Drag to move it,
+//     double-click to remove it.
 
-const OBSTACLE_PAD = 14; // halo around every non-endpoint node
-const GRID         = 10; // A* grid resolution
-const STUB      = 30; // perpendicular distance from the handle
+const STUB = 30;
+const GRID = 10;
 
 const selectNodes = (s) => s.nodeInternals;
 
 export default function SmartEdge(props) {
   const {
     id, source, target,
-    // React Flow v11 passes handle IDs as sourceHandleId / targetHandleId
-    // on edge components. The edge *record* uses sourceHandle /
-    // targetHandle — we support both for safety.
     sourceHandleId, targetHandleId,
     sourceHandle, targetHandle,
     style = {}, markerEnd, label, animated, selected,
@@ -37,54 +37,8 @@ export default function SmartEdge(props) {
   const sourceNode = nodeInternals.get(source);
   const targetNode = nodeInternals.get(target);
 
-  // Obstacles: every measured node EXCEPT
-  //  (a) the edge's own endpoints,
-  //  (b) any ancestor zone of either endpoint.
-  // Rule (b) is what lets an edge from an outside network device cross
-  // the border of the zone that contains the target and land on a
-  // specific device inside: the containing zone is not an obstacle for
-  // edges whose endpoint lives in it. Every OTHER zone stays an
-  // obstacle so lines don't leak through unrelated zone backgrounds.
-  const obstacles = useMemo(() => {
-    const excluded = new Set([source, target]);
-    const walkAncestors = (id) => {
-      let cur = nodeInternals.get(id);
-      while (cur && cur.parentNode) {
-        excluded.add(cur.parentNode);
-        cur = nodeInternals.get(cur.parentNode);
-      }
-    };
-    walkAncestors(source);
-    walkAncestors(target);
-
-    const list = [];
-    for (const n of nodeInternals.values()) {
-      if (excluded.has(n.id)) continue;
-      if (n.type === 'annotation') continue;
-      if (!n.width || !n.height) continue;
-      const p = n.positionAbsolute ?? n.position;
-      list.push({
-        x: p.x - OBSTACLE_PAD,
-        y: p.y - OBSTACLE_PAD,
-        w: n.width  + OBSTACLE_PAD * 2,
-        h: n.height + OBSTACLE_PAD * 2,
-      });
-    }
-    return list;
-  }, [nodeInternals, source, target]);
-
   if (!sourceNode || !targetNode) return null;
 
-  // Anchors + stubs — every coordinate is quantised to the grid so the
-  // first and last segments can never become micro-diagonals when the
-  // node's side midpoint falls between grid cells.
-  // If the edge was drawn from a specific handle, honour it; otherwise
-  // fall back to the floating side midpoint closest to the other node.
-  // Snap every anchor to the grid. The worst-case shift is 5 px —
-  // well within the handle dot's radius (handles are 14-16 px wide),
-  // so the line still visually ends inside the bubble, and every
-  // segment of the resulting path is perfectly grid-aligned → no
-  // micro-corners.
   const sa = snapAnchor(
     anchorFromHandle(sourceNode, srcHandle) ?? getSideAnchor(sourceNode, targetNode)
   );
@@ -94,75 +48,40 @@ export default function SmartEdge(props) {
   const ss = stubOut(sa);
   const ts = stubOut(ta);
 
-  // User-placed waypoints act as hard bend points: A* runs segment
-  // by segment between consecutive points in [ss, ...waypoints, ts]
-  // so each leg still routes around obstacles, but the overall shape
-  // follows exactly the path the user chose.
   const waypoints = (props.data?.waypoints ?? []).map((p) => ({
-    x: Math.round(p.x / 10) * 10,
-    y: Math.round(p.y / 10) * 10,
+    x: Math.round(p.x / GRID) * GRID,
+    y: Math.round(p.y / GRID) * GRID,
   }));
-  if (typeof window !== 'undefined') {
-    window.__wpEdgeRender = (window.__wpEdgeRender ?? 0) + 1;
-    window.__wpEdgeWps = waypoints.length;
-  }
-  // Route each leg independently. Shortcutting is applied per-leg so
-  // waypoints stay as hard bends: if we merged all legs first, the
-  // shortcut pass would happily straight-line from ss to ts and erase
-  // every waypoint in between.
+
+  // Build each leg between consecutive stops. Stops are
+  // [ss, wp0, wp1, ..., wpN-1, ts] — so leg i is the route between
+  // stops[i] and stops[i+1]. Stubs enter/leave on a fixed axis, and
+  // each leg carries that axis forward so we never double-back.
   const stops = [ss, ...waypoints, ts];
-  const mergedLegs = [];
-  let routeFailed = false;
+  const legs = [];
+  let axis = axisOfSide(sa.side);
   for (let i = 0; i < stops.length - 1; i++) {
-    const leg = astar(stops[i], stops[i + 1], obstacles);
-    if (!leg || leg.length === 0) { routeFailed = true; break; }
-    const shortened = shortcut(leg, obstacles);
-    mergedLegs.push(i === 0 ? shortened : shortened.slice(1));
+    const forceExit = i === stops.length - 2 ? axisOfSide(ta.side) : null;
+    const { points: legPoints, exitAxis } = orthogonalLeg(
+      stops[i], stops[i + 1], axis, forceExit
+    );
+    legs.push(legPoints);
+    axis = exitAxis;
   }
-  if (routeFailed) return renderWarning(id, sa, ta, style, markerEnd);
-  const mid = mergedLegs.flat();
 
-  // Include the stub tips explicitly so the first/last segment is
-  // guaranteed axis-aligned with the anchor (the stub is perpendicular
-  // to the side). Without this, an unsnapped anchor could connect to
-  // the first grid point diagonally.
-  const raw = [sa, ss, ...mid, ts, ta];
-  const points = simplify(raw);
-  const d = polyline(points);
+  // Concatenate legs into one polyline (don't duplicate shared stops).
+  const full = [sa];
+  full.push(...legs[0]);
+  for (let i = 1; i < legs.length; i++) full.push(...legs[i].slice(1));
+  full.push(ta);
+  const pathPoints = simplify(full);
+  const d = polyline(pathPoints);
 
-  const centre = points[Math.floor(points.length / 2)];
-  const totalLen = polylineLength(points);
-
-  const { screenToFlowPosition } = useReactFlow();
-  const { setEdges: setEdgesCtx } = useContext(EditorCtx);
-  const snap = (v) => Math.round(v / 10) * 10;
-  // Double-click on the path adds a new waypoint at the click position.
-  const addWaypointAtEvent = (ev) => {
-    ev.stopPropagation();
-    const pt = screenToFlowPosition({ x: ev.clientX, y: ev.clientY });
-    const click = { x: snap(pt.x), y: snap(pt.y) };
-    setEdgesCtx((eds) => eds.map((e) => {
-      if (e.id !== id) return e;
-      const wps = [...(e.data?.waypoints ?? [])];
-      wps.push(click);
-      return { ...e, data: { ...(e.data ?? {}), waypoints: wps } };
-    }));
-  };
+  const centre = pathPoints[Math.floor(pathPoints.length / 2)];
+  const totalLen = polylineLength(pathPoints);
 
   return (
     <>
-      {/* Wide invisible hit area. React Flow's default edges use a
-          separate interaction path because a 2 px stroke is hard to
-          click. Double-click here to add a waypoint; drag waypoint
-          dots (appear on selection) to move bends. */}
-      <path
-        d={d}
-        fill="none"
-        stroke="transparent"
-        strokeWidth="20"
-        style={{ pointerEvents: 'stroke', cursor: 'pointer' }}
-        onDoubleClick={addWaypointAtEvent}
-      />
       <path
         id={id}
         d={d}
@@ -170,129 +89,86 @@ export default function SmartEdge(props) {
         strokeLinejoin="miter"
         strokeLinecap="butt"
         className={`react-flow__edge-path${animated ? ' animated' : ''}`}
-        style={{ ...style, pointerEvents: 'none' }}
+        style={{ ...style, pointerEvents: 'stroke' }}
         markerEnd={markerEnd}
       />
       {label && (
         <EdgeLabelRenderer>
-          <div className="react-flow__edge-label-floating"
-            style={{ transform: `translate(-50%, -50%) translate(${centre.x}px, ${centre.y}px)` }}>
+          <div
+            className="react-flow__edge-label-floating"
+            style={{ transform: `translate(-50%, -50%) translate(${centre.x}px, ${centre.y}px)` }}
+          >
             {label}
           </div>
         </EdgeLabelRenderer>
       )}
       {selected && (
         <EdgeLabelRenderer>
-          <div className="edge-size-chip"
-            style={{ transform: `translate(-50%, -50%) translate(${centre.x}px, ${centre.y + 16}px)` }}>
+          <div
+            className="edge-size-chip"
+            style={{ transform: `translate(-50%, -50%) translate(${centre.x}px, ${centre.y + 16}px)` }}
+          >
             {Math.round(totalLen)} px
           </div>
         </EdgeLabelRenderer>
       )}
       <EdgeLabelRenderer>
-        <SegmentHandles edgeId={id} points={points} selected={selected} />
+        {legs.map((legPts, i) => {
+          if (arcLength(legPts) < 60) return null;
+          const mid = arcMidpoint(legPts);
+          return (
+            <LegHandle
+              key={`leg-${i}`}
+              edgeId={id}
+              legIndex={i}
+              mid={mid}
+              horizontal={mid.horizontal}
+            />
+          );
+        })}
+        {waypoints.map((wp, i) => (
+          <WaypointMoveHandle
+            key={`wp-${i}`}
+            edgeId={id}
+            wpIndex={i}
+            pos={wp}
+          />
+        ))}
       </EdgeLabelRenderer>
     </>
   );
 }
 
-// Draggable handles at the MIDPOINT of every straight segment of the
-// current path (auto-computed, no double-click needed). Dragging shifts
-// the line through the cursor: first drag creates a waypoint; the same
-// segment's handle on later drags reuses the waypoint near it.
-function SegmentHandles({ edgeId, points, selected }) {
-  // Pre-compute each segment's midpoint, skipping tiny ones so handles
-  // don't pile up near corners.
-  const segments = useMemo(() => {
-    const segs = [];
-    for (let i = 0; i < points.length - 1; i++) {
-      const a = points[i], b = points[i + 1];
-      const len = Math.abs(b.x - a.x) + Math.abs(b.y - a.y);
-      if (len < 60) continue;
-      segs.push({
-        mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 },
-        horizontal: a.y === b.y,
-      });
-    }
-    return segs;
-  }, [points]);
+// ---- Handles ----
 
-  return segments.map((seg, i) => (
-    <SegmentHandle key={i} edgeId={edgeId} seg={seg} selected={selected} />
-  ));
-}
-
-// Single waypoint square. Native pointerdown on the element +
-// setPointerCapture so every subsequent pointermove/up is delivered
-// to our element regardless of where the cursor goes. Native event
-// listeners, not React synthetic — they fire before React Flow's
-// pane handlers regardless of React's bubble order.
-function SegmentHandle({ edgeId, seg, selected }) {
-  const ref = useRef(null);
-  const { screenToFlowPosition } = useReactFlow();
-  const { setEdges } = useContext(EditorCtx);
-
-  const liveRef = useRef({ seg, screenToFlowPosition, setEdges, edgeId });
-  liveRef.current = { seg, screenToFlowPosition, setEdges, edgeId };
+// Shared drag setup for a handle that uses native pointer events and
+// pointer capture so the cursor doesn't need to stay on the handle
+// during the drag.
+function useHandleDrag(ref, onDrag) {
+  const onDragRef = useRef(onDrag);
+  onDragRef.current = onDrag;
 
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const snap = (v) => Math.round(v / 10) * 10;
-    let ownedIdx = null;
-    let startMid = null;
     let activePointer = null;
-
-    const applyMove = (clientX, clientY) => {
-      const { screenToFlowPosition: s2f, setEdges: se, edgeId: eid } = liveRef.current;
-      const pt = s2f({ x: clientX, y: clientY });
-      if (!pt || !Number.isFinite(pt.x) || !Number.isFinite(pt.y)) return;
-      const newPt = { x: snap(pt.x), y: snap(pt.y) };
-      window.__wpDbg = (window.__wpDbg ?? 0) + 1;
-      if (typeof se !== 'function') {
-        window.__wpSeBad = (window.__wpSeBad ?? 0) + 1;
-        return;
-      }
-      se((eds) => eds.map((ed) => {
-        if (ed.id !== eid) return ed;
-        const wps = [...(ed.data?.waypoints ?? [])];
-        if (ownedIdx === null) {
-          const j = wps.findIndex((w) =>
-            Math.abs(w.x - startMid.x) + Math.abs(w.y - startMid.y) < 80
-          );
-          if (j >= 0) {
-            ownedIdx = j;
-          } else {
-            wps.push(newPt);
-            ownedIdx = wps.length - 1;
-            window.__wpAdd = (window.__wpAdd ?? 0) + 1;
-            return { ...ed, data: { ...(ed.data ?? {}), waypoints: wps } };
-          }
-        }
-        wps[ownedIdx] = newPt;
-        window.__wpUpd = (window.__wpUpd ?? 0) + 1;
-        return { ...ed, data: { ...(ed.data ?? {}), waypoints: wps } };
-      }));
-    };
+    let firstMove = true;
 
     const onDown = (e) => {
       if (e.button !== undefined && e.button !== 0) return;
       e.preventDefault();
       e.stopPropagation();
-      e.stopImmediatePropagation?.();
-      ownedIdx = null;
-      startMid = { x: liveRef.current.seg.mid.x, y: liveRef.current.seg.mid.y };
       activePointer = e.pointerId;
+      firstMove = true;
       try { el.setPointerCapture(e.pointerId); } catch {}
-      window.__wpDownDbg = (window.__wpDownDbg ?? 0) + 1;
     };
     const onMove = (e) => {
       if (activePointer == null || e.pointerId !== activePointer) return;
       e.preventDefault();
-      e.stopPropagation();
-      applyMove(e.clientX, e.clientY);
+      onDragRef.current?.(e.clientX, e.clientY, firstMove);
+      firstMove = false;
     };
-    const onUp = (e) => {
+    const onUp = () => {
       if (activePointer == null) return;
       try { el.releasePointerCapture(activePointer); } catch {}
       activePointer = null;
@@ -310,35 +186,174 @@ function SegmentHandle({ edgeId, seg, selected }) {
       el.removeEventListener('pointercancel', onUp);
       el.removeEventListener('lostpointercapture', onUp);
     };
-  }, []);
+  }, [ref]);
+}
+
+// One open square per leg. Dragging it creates a new waypoint at
+// legIndex in the edge's waypoints array, then repositions it as the
+// pointer moves.
+function LegHandle({ edgeId, legIndex, mid, horizontal }) {
+  const ref = useRef(null);
+  const { screenToFlowPosition } = useReactFlow();
+  const { setEdges } = useContext(EditorCtx);
+  const state = useRef({ edgeId, legIndex, setEdges, screenToFlowPosition });
+  state.current = { edgeId, legIndex, setEdges, screenToFlowPosition };
+  const createdIdxRef = useRef(null);
+
+  useHandleDrag(ref, (cx, cy, firstMove) => {
+    const { edgeId: eid, legIndex: li, setEdges: se, screenToFlowPosition: s2f } = state.current;
+    const pt = s2f({ x: cx, y: cy });
+    if (!pt || !Number.isFinite(pt.x) || !Number.isFinite(pt.y)) return;
+    const newPt = { x: snap(pt.x), y: snap(pt.y) };
+    if (firstMove) createdIdxRef.current = null;
+    se((eds) => eds.map((ed) => {
+      if (ed.id !== eid) return ed;
+      const wps = [...(ed.data?.waypoints ?? [])];
+      if (createdIdxRef.current === null) {
+        // Insert a fresh waypoint at legIndex (leg i lies between
+        // stops[i] and stops[i+1]; in the waypoints array that slot
+        // is `i`, so splice at i inserts between the two stops).
+        const at = Math.max(0, Math.min(li, wps.length));
+        wps.splice(at, 0, newPt);
+        createdIdxRef.current = at;
+      } else {
+        wps[createdIdxRef.current] = newPt;
+      }
+      return { ...ed, data: { ...(ed.data ?? {}), waypoints: wps } };
+    }));
+  });
 
   return (
     <div
       ref={ref}
-      className={`edge-waypoint nodrag nopan${selected ? ' edge-waypoint--active' : ''} ${seg.horizontal ? 'h' : 'v'}`}
-      style={{ transform: `translate(-50%, -50%) translate(${seg.mid.x}px, ${seg.mid.y}px)`, touchAction: 'none' }}
-      title="Drag to reshape the line"
+      className={`edge-waypoint nodrag nopan ${horizontal ? 'h' : 'v'}`}
+      style={{
+        transform: `translate(-50%, -50%) translate(${mid.x}px, ${mid.y}px)`,
+        touchAction: 'none',
+      }}
+      title="Drag to bend the line"
     />
   );
 }
 
-function polylineLength(points) {
-  let total = 0;
-  for (let i = 1; i < points.length; i++) {
-    total += Math.abs(points[i].x - points[i - 1].x) + Math.abs(points[i].y - points[i - 1].y);
-  }
-  return total;
+// Filled square at an existing waypoint. Drag to reposition it,
+// double-click to remove it.
+function WaypointMoveHandle({ edgeId, wpIndex, pos }) {
+  const ref = useRef(null);
+  const { screenToFlowPosition } = useReactFlow();
+  const { setEdges } = useContext(EditorCtx);
+  const state = useRef({ edgeId, wpIndex, setEdges, screenToFlowPosition });
+  state.current = { edgeId, wpIndex, setEdges, screenToFlowPosition };
+
+  useHandleDrag(ref, (cx, cy) => {
+    const { edgeId: eid, wpIndex: i, setEdges: se, screenToFlowPosition: s2f } = state.current;
+    const pt = s2f({ x: cx, y: cy });
+    if (!pt || !Number.isFinite(pt.x) || !Number.isFinite(pt.y)) return;
+    const newPt = { x: snap(pt.x), y: snap(pt.y) };
+    se((eds) => eds.map((ed) => {
+      if (ed.id !== eid) return ed;
+      const wps = [...(ed.data?.waypoints ?? [])];
+      if (i >= 0 && i < wps.length) wps[i] = newPt;
+      return { ...ed, data: { ...(ed.data ?? {}), waypoints: wps } };
+    }));
+  });
+
+  const onDoubleClick = (e) => {
+    e.stopPropagation();
+    const { edgeId: eid, wpIndex: i, setEdges: se } = state.current;
+    se((eds) => eds.map((ed) => {
+      if (ed.id !== eid) return ed;
+      const wps = (ed.data?.waypoints ?? []).filter((_, j) => j !== i);
+      return { ...ed, data: { ...(ed.data ?? {}), waypoints: wps } };
+    }));
+  };
+
+  return (
+    <div
+      ref={ref}
+      className="edge-waypoint edge-waypoint--placed nodrag nopan"
+      style={{
+        transform: `translate(-50%, -50%) translate(${pos.x}px, ${pos.y}px)`,
+        touchAction: 'none',
+      }}
+      onDoubleClick={onDoubleClick}
+      title="Drag to move · double-click to remove"
+    />
+  );
 }
 
 // ---- Geometry ----
 
+const snap = (v) => Math.round(v / GRID) * GRID;
+
+function axisOfSide(side) {
+  return (side === Position.Left || side === Position.Right) ? 'h' : 'v';
+}
+
+// Build a 0- or 1-elbow path from `from` to `to`. `entryAxis` is the
+// direction the line arrives in; `forceExitAxis` pins the last
+// segment's direction (used for the final leg so the line meets the
+// target stub perpendicularly).
+function orthogonalLeg(from, to, entryAxis, forceExitAxis) {
+  if (from.x === to.x) return { points: [from, to], exitAxis: 'v' };
+  if (from.y === to.y) return { points: [from, to], exitAxis: 'h' };
+  let elbow;
+  let exit;
+  if (forceExitAxis === 'v') {
+    elbow = { x: to.x, y: from.y };
+    exit = 'v';
+  } else if (forceExitAxis === 'h') {
+    elbow = { x: from.x, y: to.y };
+    exit = 'h';
+  } else if (entryAxis === 'h') {
+    elbow = { x: to.x, y: from.y };
+    exit = 'v';
+  } else {
+    elbow = { x: from.x, y: to.y };
+    exit = 'h';
+  }
+  return { points: [from, elbow, to], exitAxis: exit };
+}
+
+function arcLength(points) {
+  let total = 0;
+  for (let i = 1; i < points.length; i++) {
+    total += Math.abs(points[i].x - points[i - 1].x) +
+             Math.abs(points[i].y - points[i - 1].y);
+  }
+  return total;
+}
+
+function arcMidpoint(points) {
+  const total = arcLength(points);
+  const target = total / 2;
+  let acc = 0;
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1];
+    const b = points[i];
+    const segLen = Math.abs(b.x - a.x) + Math.abs(b.y - a.y);
+    if (acc + segLen >= target) {
+      const t = segLen === 0 ? 0 : (target - acc) / segLen;
+      return {
+        x: a.x + (b.x - a.x) * t,
+        y: a.y + (b.y - a.y) * t,
+        horizontal: a.y === b.y,
+      };
+    }
+    acc += segLen;
+  }
+  const last = points[points.length - 1];
+  return { x: last.x, y: last.y, horizontal: true };
+}
+
+function polylineLength(points) {
+  return arcLength(points);
+}
+
 // Decode a handle id of the form "s-i" where s ∈ {t,r,b,l} and i is
-// the zero-based index along that side. For a device with data.handles
-// = { top: 2, right: 3, … } the i-th handle on side s sits at
-// (i+1)/(n+1) along the perpendicular axis.
-// Handle positions are rendered in grid-aligned px (see NetworkNode /
-// ZoneNode). Mirror the formula exactly so the edge endpoint lands on
-// the same pixel as the visible handle dot.
+// the zero-based index along that side. Handle positions are rendered
+// in grid-aligned px so the edge endpoint lands on the exact pixel as
+// the handle dot.
 function anchorFromHandle(node, handleId) {
   if (!node || !handleId) return null;
   const [side, idxStr] = handleId.split('-');
@@ -348,15 +363,14 @@ function anchorFromHandle(node, handleId) {
   const w = node.width ?? 170;
   const h = node.height ?? 150;
   const sideCount = Math.max(1, Number(node.data?.handles?.[side]) || 1);
-  const snapPx = (v) => Math.round(v / 10) * 10;
-  const along_px_h = snapPx((w * (idx + 1)) / (sideCount + 1));
-  const along_px_v = snapPx((h * (idx + 1)) / (sideCount + 1));
-
+  const snapPx = (v) => Math.round(v / GRID) * GRID;
+  const along_h = snapPx((w * (idx + 1)) / (sideCount + 1));
+  const along_v = snapPx((h * (idx + 1)) / (sideCount + 1));
   switch (side) {
-    case 't': return { x: p.x + along_px_h, y: p.y,       side: Position.Top };
-    case 'b': return { x: p.x + along_px_h, y: p.y + h,   side: Position.Bottom };
-    case 'l': return { x: p.x,              y: p.y + along_px_v, side: Position.Left };
-    case 'r': return { x: p.x + w,          y: p.y + along_px_v, side: Position.Right };
+    case 't': return { x: p.x + along_h, y: p.y,         side: Position.Top };
+    case 'b': return { x: p.x + along_h, y: p.y + h,     side: Position.Bottom };
+    case 'l': return { x: p.x,           y: p.y + along_v, side: Position.Left };
+    case 'r': return { x: p.x + w,       y: p.y + along_v, side: Position.Right };
     default:  return null;
   }
 }
@@ -364,15 +378,14 @@ function anchorFromHandle(node, handleId) {
 function getSideAnchor(self, other) {
   const sp = self.positionAbsolute ?? self.position;
   const op = other.positionAbsolute ?? other.position;
-  const w = self.width  ?? 170;
+  const w = self.width ?? 170;
   const h = self.height ?? 150;
   const scx = sp.x + w / 2;
   const scy = sp.y + h / 2;
-  const ocx = op.x + (other.width  ?? 170) / 2;
+  const ocx = op.x + (other.width ?? 170) / 2;
   const ocy = op.y + (other.height ?? 150) / 2;
   const dx = ocx - scx;
   const dy = ocy - scy;
-
   if (Math.abs(dx) * h >= Math.abs(dy) * w) {
     return dx >= 0
       ? { x: sp.x + w, y: scy, side: Position.Right }
@@ -384,13 +397,9 @@ function getSideAnchor(self, other) {
 }
 
 function snapAnchor(a) {
-  return { x: quant(a.x), y: quant(a.y), side: a.side };
+  return { x: snap(a.x), y: snap(a.y), side: a.side };
 }
 
-// Perpendicular stub. Anchors are now grid-aligned both in the handle
-// render and the router's anchor math, and STUB is a multiple of the
-// grid, so every coordinate stays on the grid without extra quant
-// tricks here.
 function stubOut(a) {
   switch (a.side) {
     case Position.Top:    return { x: a.x, y: a.y - STUB };
@@ -401,175 +410,8 @@ function stubOut(a) {
   }
 }
 
-function pointInRect(x, y, r) {
-  return x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
-}
-
-function blocked(x, y, obstacles) {
-  for (const r of obstacles) if (pointInRect(x, y, r)) return true;
-  return false;
-}
-
-// ---- A* on an orthogonal grid ----
-
-function astar(start, end, obstacles) {
-  const sx = quant(start.x);
-  const sy = quant(start.y);
-  const ex = quant(end.x);
-  const ey = quant(end.y);
-
-  if (sx === ex && sy === ey) return [];
-
-  // Compute a bounding box of interest so the grid stays finite. Include
-  // start, end and every obstacle rect with some slack.
-  let minX = Math.min(sx, ex) - GRID * 8;
-  let minY = Math.min(sy, ey) - GRID * 8;
-  let maxX = Math.max(sx, ex) + GRID * 8;
-  let maxY = Math.max(sy, ey) + GRID * 8;
-  for (const r of obstacles) {
-    minX = Math.min(minX, r.x - GRID);
-    minY = Math.min(minY, r.y - GRID);
-    maxX = Math.max(maxX, r.x + r.w + GRID);
-    maxY = Math.max(maxY, r.y + r.h + GRID);
-  }
-
-  const inBounds = (x, y) =>
-    x >= minX && x <= maxX && y >= minY && y <= maxY;
-
-  const key = (x, y) => `${x},${y}`;
-
-  // Simple priority queue. O(n log n) via sorted insert — fine for our
-  // small grids.
-  const open = [];
-  const push = (node) => {
-    let lo = 0, hi = open.length;
-    while (lo < hi) {
-      const mid = (lo + hi) >>> 1;
-      if (open[mid].f > node.f) hi = mid; else lo = mid + 1;
-    }
-    open.splice(lo, 0, node);
-  };
-
-  const cameFrom = new Map();
-  const gScore = new Map();
-
-  gScore.set(key(sx, sy), 0);
-  push({ x: sx, y: sy, f: Math.abs(ex - sx) + Math.abs(ey - sy) });
-
-  const MAX_ITER = 60000;
-  let iter = 0;
-
-  while (open.length && iter++ < MAX_ITER) {
-    const cur = open.shift();
-    if (cur.x === ex && cur.y === ey) return reconstruct(cameFrom, cur, sx, sy);
-
-    const curKey = key(cur.x, cur.y);
-    const curG = gScore.get(curKey) ?? Infinity;
-
-    for (const [dx, dy] of [[GRID, 0], [-GRID, 0], [0, GRID], [0, -GRID]]) {
-      const nx = cur.x + dx;
-      const ny = cur.y + dy;
-      if (!inBounds(nx, ny)) continue;
-      if (blocked(nx, ny, obstacles)) continue;
-      const nKey = key(nx, ny);
-      const tentative = curG + GRID;
-      if (tentative < (gScore.get(nKey) ?? Infinity)) {
-        cameFrom.set(nKey, { x: cur.x, y: cur.y });
-        gScore.set(nKey, tentative);
-        push({ x: nx, y: ny, f: tentative + Math.abs(ex - nx) + Math.abs(ey - ny) });
-      }
-    }
-  }
-  return null;
-}
-
-function reconstruct(cameFrom, end, sx, sy) {
-  const path = [{ x: end.x, y: end.y }];
-  let cur = cameFrom.get(`${end.x},${end.y}`);
-  while (cur) {
-    path.unshift({ x: cur.x, y: cur.y });
-    if (cur.x === sx && cur.y === sy) break;
-    cur = cameFrom.get(`${cur.x},${cur.y}`);
-  }
-  return path;
-}
-
-function quant(v) { return Math.round(v / GRID) * GRID; }
-
-// ---- Post-processing ----
-
-// Does an axis-aligned segment from a to b avoid every obstacle?
-// Obstacles are already padded rectangles. For a non-axis-aligned pair
-// we return false — this helper is only for orthogonal segments.
-function segmentClear(a, b, obstacles) {
-  if (a.x === b.x) {
-    const x = a.x;
-    const y1 = Math.min(a.y, b.y);
-    const y2 = Math.max(a.y, b.y);
-    for (const r of obstacles) {
-      if (x > r.x && x < r.x + r.w && y2 > r.y && y1 < r.y + r.h) return false;
-    }
-    return true;
-  }
-  if (a.y === b.y) {
-    const y = a.y;
-    const x1 = Math.min(a.x, b.x);
-    const x2 = Math.max(a.x, b.x);
-    for (const r of obstacles) {
-      if (y > r.y && y < r.y + r.h && x2 > r.x && x1 < r.x + r.w) return false;
-    }
-    return true;
-  }
-  return false;
-}
-
-// Greedy shortcut: from each point, find the farthest later point
-// reachable via a straight axis-aligned segment OR an L-shape (one
-// right-angle corner) that clears every obstacle. Replace everything
-// in between with at most one corner. Turns staircase output from A*
-// into clean right-angle bends.
-function shortcut(points, obstacles) {
-  if (points.length <= 2) return points;
-  const out = [];
-  let i = 0;
-  while (i < points.length) {
-    out.push(points[i]);
-    if (i >= points.length - 1) break;
-
-    let bestJ = i + 1;
-    let bestCorner = null;
-
-    for (let j = points.length - 1; j > i + 1; j--) {
-      const a = points[i];
-      const b = points[j];
-
-      // Straight axis-aligned shot?
-      if ((a.x === b.x || a.y === b.y) && segmentClear(a, b, obstacles)) {
-        bestJ = j; bestCorner = null; break;
-      }
-
-      // One-corner L-shape — try both possible corners, prefer neither
-      // unless both work.
-      const c1 = { x: b.x, y: a.y };
-      const c2 = { x: a.x, y: b.y };
-      const c1ok = segmentClear(a, c1, obstacles) && segmentClear(c1, b, obstacles);
-      const c2ok = segmentClear(a, c2, obstacles) && segmentClear(c2, b, obstacles);
-      if (c1ok || c2ok) {
-        bestJ = j;
-        bestCorner = c1ok ? c1 : c2;
-        break;
-      }
-    }
-
-    if (bestCorner) out.push(bestCorner);
-    i = bestJ;
-  }
-  return out;
-}
-
-// Collapse collinear runs: three points a,b,c are collinear if they
-// share the same x (vertical) or the same y (horizontal). b is then
-// redundant.
+// Collapse collinear runs: b is redundant when a, b, c share a row
+// or a column.
 function simplify(points) {
   if (points.length <= 2) return points;
   const out = [points[0]];
@@ -577,8 +419,9 @@ function simplify(points) {
     const a = out[out.length - 1];
     const b = points[i];
     const c = points[i + 1];
-    const straight = (a.x === b.x && b.x === c.x) || (a.y === b.y && b.y === c.y);
-    if (!straight) out.push(b);
+    const collinear = (a.x === b.x && b.x === c.x) ||
+                      (a.y === b.y && b.y === c.y);
+    if (!collinear) out.push(b);
   }
   out.push(points[points.length - 1]);
   return out;
@@ -587,31 +430,8 @@ function simplify(points) {
 function polyline(points) {
   if (!points.length) return '';
   let d = `M ${points[0].x} ${points[0].y}`;
-  for (let i = 1; i < points.length; i++) d += ` L ${points[i].x} ${points[i].y}`;
+  for (let i = 1; i < points.length; i++) {
+    d += ` L ${points[i].x} ${points[i].y}`;
+  }
   return d;
-}
-
-// ---- Warning edge when no route can be found ----
-
-function renderWarning(id, sa, ta, _style, markerEnd) {
-  // Draw a deliberately ugly dashed red L-shape so the author notices.
-  const corner = { x: ta.x, y: sa.y };
-  const d = polyline([sa, corner, ta]);
-  return (
-    <>
-      <path
-        id={id}
-        d={d}
-        fill="none"
-        style={{ stroke: '#ef4444', strokeWidth: 1.5, strokeDasharray: '3 4', opacity: 0.85 }}
-        markerEnd={markerEnd}
-      />
-      <EdgeLabelRenderer>
-        <div className="react-flow__edge-label-floating edge-warning"
-          style={{ transform: `translate(-50%, -50%) translate(${corner.x}px, ${corner.y}px)` }}>
-          ⚠︎ no route — add space
-        </div>
-      </EdgeLabelRenderer>
-    </>
-  );
 }
