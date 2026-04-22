@@ -16,7 +16,12 @@ export default function AnnotationNode({ data, selected }) {
         borderColor: color,
         borderStyle,
         background: `${color}14`,
-        color: 'var(--annotation-body, #f1f5f9)',
+        // Always use the theme's text colour — the variant colour is
+        // already the border, and the tinted background plus dashed/
+        // solid border carry the "note / callout / warning / success"
+        // signal without relying on coloured text that's invisible on
+        // the matching pale fill.
+        color: 'var(--text)',
       }}
     >
       <NodeResizer
@@ -27,7 +32,7 @@ export default function AnnotationNode({ data, selected }) {
         handleStyle={{ background: color, width: 8, height: 8 }}
       />
       {data?.title && (
-        <div className="annotation-title" style={{ color }}>{data.title}</div>
+        <div className="annotation-title">{data.title}</div>
       )}
       <div className="annotation-body">{text}</div>
     </div>

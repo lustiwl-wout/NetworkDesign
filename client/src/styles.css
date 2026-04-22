@@ -64,7 +64,6 @@ html.theme-professional {
   --floating-bg: rgba(255, 255, 255, 0.98);
   --grid: #e5e7eb;
   --icon-line: #1f2937;
-  --annotation-body: #1f2937;
   /* Deep-navy accent needs white text on top, not the default
      near-black the other themes use. */
   --on-accent: #ffffff;
@@ -119,18 +118,13 @@ html.theme-professional .zone-header {
 /* --- Grid --------------------------------------------------------- */
 html.theme-professional .react-flow__background { opacity: 0.4; }
 
-/* In Professional the per-variant colour on an annotation's title
-   (yellow / blue / red / green) reads as unreadable against the
-   8%-tinted, near-white background. Force the title dark instead;
-   the border + tint still carry the variant signal. Bump the body
-   tint alpha so backgrounds also have visible contrast. */
-html.theme-professional .annotation-node .annotation-title {
-  color: var(--text) !important;
-}
-html.theme-professional .annotation-node {
-  /* Override the 0x14 (~8%) alpha fill the component applies
-     inline, since on white it disappears. */
-  background: #f6f7fa !important;
+/* On light-canvas themes the annotation's 0x14 alpha-tint fill
+   disappears into the page. Replace it with a concrete neutral
+   panel so the block is visible; the coloured border still
+   carries the variant signal. */
+html.theme-professional .annotation-node,
+html.theme-light        .annotation-node {
+  background: var(--panel-2) !important;
 }
 
 * { box-sizing: border-box; }
