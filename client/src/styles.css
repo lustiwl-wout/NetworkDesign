@@ -157,6 +157,7 @@ html, body, #root {
 .topbar .btn:not(.theme-btn),
 .topbar a.btn,
 .topbar .save-status {
+  box-sizing: border-box;
   min-width: 104px;
   height: 32px;
   padding: 0 12px;
@@ -165,9 +166,13 @@ html, body, #root {
   justify-content: center;
   white-space: nowrap;
   line-height: 1;
+  /* Font family explicit — <button> elements pick up a system
+     UA font in some browsers even with font inherit on parents. */
+  font-family: inherit;
   font-size: 13px;
   font-weight: 500;
   letter-spacing: 0.01em;
+  -webkit-font-smoothing: antialiased;
 }
 
 .topbar h1 {
