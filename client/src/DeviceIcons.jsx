@@ -241,8 +241,8 @@ function BoundaryOut({ accent }) {
         </linearGradient>
       </defs>
       <rect x="4" y="14" width="56" height="36" rx="6" fill="url(#bout-g)" stroke={LIGHT} strokeWidth="2" />
-      <text x="10" y="37" fill={LIGHT} fontSize="13" fontWeight="800" letterSpacing="0.08em">OUT</text>
-      <polygon points="40,24 54,32 40,40" fill={LIGHT} />
+      <text x="9" y="37" fill={LIGHT} fontSize="13" fontWeight="800" letterSpacing="0.08em">OUT</text>
+      <polygon points="44,24 58,32 44,40" fill={LIGHT} />
     </svg>
   );
 }
