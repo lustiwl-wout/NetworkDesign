@@ -1,7 +1,5 @@
 import { useContext, useEffect, useMemo, useRef } from 'react';
 import { useStore, useReactFlow, EdgeLabelRenderer, Position } from 'reactflow';
-import { drag as d3Drag } from 'd3-drag';
-import { select as d3Select } from 'd3-selection';
 import { EditorCtx } from './EditorCtx.js';
 
 // Custom orthogonal router. Built from scratch because every off-the-
@@ -222,10 +220,11 @@ function SegmentHandles({ edgeId, points, selected }) {
   ));
 }
 
-// Single waypoint square. Uses d3-drag (the same library NodeResizer
-// relies on) with `.container(document.body)` so the drag coordinate
-// system doesn't get lost inside EdgeLabelRenderer's portal. On the
-// first move we create a new waypoint; subsequent moves update it.
+// Single waypoint square. Native pointerdown on the element +
+// setPointerCapture so every subsequent pointermove/up is delivered
+// to our element regardless of where the cursor goes. Native event
+// listeners, not React synthetic — they fire before React Flow's
+// pane handlers regardless of React's bubble order.
 function SegmentHandle({ edgeId, seg, selected }) {
   const ref = useRef(null);
   const { screenToFlowPosition } = useReactFlow();
@@ -240,12 +239,14 @@ function SegmentHandle({ edgeId, seg, selected }) {
     const snap = (v) => Math.round(v / 10) * 10;
     let ownedIdx = null;
     let startMid = null;
+    let activePointer = null;
 
     const applyMove = (clientX, clientY) => {
       const { screenToFlowPosition: s2f, setEdges: se, edgeId: eid } = liveRef.current;
       const pt = s2f({ x: clientX, y: clientY });
-      if (!Number.isFinite(pt?.x) || !Number.isFinite(pt?.y)) return;
+      if (!pt || !Number.isFinite(pt.x) || !Number.isFinite(pt.y)) return;
       const newPt = { x: snap(pt.x), y: snap(pt.y) };
+      window.__wpDbg = (window.__wpDbg ?? 0) + 1;
       se((eds) => eds.map((ed) => {
         if (ed.id !== eid) return ed;
         const wps = [...(ed.data?.waypoints ?? [])];
@@ -266,25 +267,40 @@ function SegmentHandle({ edgeId, seg, selected }) {
       }));
     };
 
-    const handler = d3Drag()
-      .container(() => document.body)
-      .filter((event) => !event.button || event.button === 0)
-      .on('start', (event) => {
-        event.sourceEvent?.stopPropagation?.();
-        ownedIdx = null;
-        startMid = { x: liveRef.current.seg.mid.x, y: liveRef.current.seg.mid.y };
-      })
-      .on('drag', (event) => {
-        const src = event.sourceEvent;
-        const cx = src?.clientX ?? src?.touches?.[0]?.clientX;
-        const cy = src?.clientY ?? src?.touches?.[0]?.clientY;
-        if (cx == null || cy == null) return;
-        applyMove(cx, cy);
-      });
+    const onDown = (e) => {
+      if (e.button !== undefined && e.button !== 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation?.();
+      ownedIdx = null;
+      startMid = { x: liveRef.current.seg.mid.x, y: liveRef.current.seg.mid.y };
+      activePointer = e.pointerId;
+      try { el.setPointerCapture(e.pointerId); } catch {}
+      window.__wpDownDbg = (window.__wpDownDbg ?? 0) + 1;
+    };
+    const onMove = (e) => {
+      if (activePointer == null || e.pointerId !== activePointer) return;
+      e.preventDefault();
+      e.stopPropagation();
+      applyMove(e.clientX, e.clientY);
+    };
+    const onUp = (e) => {
+      if (activePointer == null) return;
+      try { el.releasePointerCapture(activePointer); } catch {}
+      activePointer = null;
+    };
 
-    d3Select(el).call(handler);
+    el.addEventListener('pointerdown', onDown);
+    el.addEventListener('pointermove', onMove);
+    el.addEventListener('pointerup', onUp);
+    el.addEventListener('pointercancel', onUp);
+    el.addEventListener('lostpointercapture', onUp);
     return () => {
-      d3Select(el).on('.drag', null);
+      el.removeEventListener('pointerdown', onDown);
+      el.removeEventListener('pointermove', onMove);
+      el.removeEventListener('pointerup', onUp);
+      el.removeEventListener('pointercancel', onUp);
+      el.removeEventListener('lostpointercapture', onUp);
     };
   }, []);
 

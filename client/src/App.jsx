@@ -60,6 +60,28 @@ function styleEdges(edges) {
   });
 }
 
+// TEMP debug: shows how many waypoint pointerdown / drag events fired.
+// Remove once drag is confirmed working end-to-end.
+function WaypointDebug() {
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setTick((v) => v + 1), 250);
+    return () => clearInterval(t);
+  }, []);
+  const down = typeof window !== 'undefined' ? (window.__wpDownDbg ?? 0) : 0;
+  const move = typeof window !== 'undefined' ? (window.__wpDbg ?? 0) : 0;
+  return (
+    <div style={{
+      position: 'absolute', right: 8, bottom: 8, zIndex: 50,
+      padding: '4px 8px', borderRadius: 6,
+      background: 'rgba(0,0,0,0.6)', color: '#fff',
+      fontSize: 11, fontFamily: 'monospace', pointerEvents: 'none',
+    }}>
+      wp: down={down} move={move}
+    </div>
+  );
+}
+
 function Editor({ me }) {
   // Write access: logged in as user or admin (but not the view-only "viewer" role).
   const canSave = !!me && me.role !== 'viewer';
@@ -671,6 +693,7 @@ function Editor({ me }) {
           <MiniMap pannable zoomable maskColor="rgba(15,23,42,0.6)" />
         </ReactFlow>
         </EditorCtx.Provider>
+        <WaypointDebug />
         {!canSave && (
           <div className="demo-banner" role="status">
             <strong>{me ? 'Demo account' : 'Guest mode'}</strong>
