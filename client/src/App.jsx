@@ -332,8 +332,20 @@ function Editor({ me }) {
   // dragged. Computed live in onNodeDrag; cleared in onNodeDragStop.
   const [guides, setGuides] = useState([]);
   const onNodeDrag = useCallback((_event, node) => {
-    const dragPos = node.positionAbsolute ?? node.position;
-    setGuides(computeGuides(node.id, nodesRef.current, { [node.id]: dragPos }));
+    // React Flow passes positionAbsolute during drag; but for a node
+    // inside a zone the node.position is relative to the zone and
+    // may be stale in our own nodesRef copy. Use the live absolute
+    // position as the override so the guide math matches where the
+    // user actually sees the node.
+    let abs = node.positionAbsolute;
+    if (!abs && node.parentNode) {
+      const parent = nodesRef.current.find((n) => n.id === node.parentNode);
+      abs = parent
+        ? { x: (parent.positionAbsolute?.x ?? parent.position.x) + node.position.x,
+            y: (parent.positionAbsolute?.y ?? parent.position.y) + node.position.y }
+        : node.position;
+    }
+    setGuides(computeGuides(node.id, nodesRef.current, { [node.id]: abs ?? node.position }));
   }, []);
 
   // Re-parent devices when dragged across zones. Zones don't clamp their

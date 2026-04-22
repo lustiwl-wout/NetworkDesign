@@ -97,11 +97,23 @@ export function computeGuides(draggedId, nodes, overrides = null) {
   if (!draggedId) return [];
   const dragged = nodes.find((n) => n.id === draggedId);
   if (!dragged) return [];
-  const a = bounds(dragged, overrides);
+
+  // Pre-compute absolute positions for every node. React Flow stores
+  // child-of-zone positions RELATIVE to the parent in node.position;
+  // node.positionAbsolute is only populated on nodes that React Flow
+  // has measured. Walking parentNode ourselves makes the guides work
+  // for nodes inside zones too.
+  const absIndex = new Map();
+  for (const n of nodes) absIndex.set(n.id, absoluteOf(n, nodes));
+  if (overrides) {
+    for (const [id, pos] of Object.entries(overrides)) absIndex.set(id, pos);
+  }
+
+  const a = bounds(dragged, absIndex.get(dragged.id));
   if (!a) return [];
 
   const others = nodes
-    .map((n) => (n.id === draggedId ? null : bounds(n)))
+    .map((n) => (n.id === draggedId ? null : bounds(n, absIndex.get(n.id))))
     .filter(Boolean);
 
   const out = [];
@@ -175,16 +187,31 @@ export function computeGuides(draggedId, nodes, overrides = null) {
   });
 }
 
-function bounds(n, overrides = null) {
+function bounds(n, absPos) {
   const w = n.width  ?? n.style?.width  ?? 0;
   const h = n.height ?? n.style?.height ?? 0;
   if (!w || !h) return null;
-  const p = overrides?.[n.id]
-    ?? n.positionAbsolute
-    ?? n.position;
+  const p = absPos ?? n.positionAbsolute ?? n.position;
   const l = p.x;
   const t = p.y;
   return { l, t, r: l + w, b: t + h, cx: l + w / 2, cy: t + h / 2 };
+}
+
+// Walk parentNode chain to compute a node's position in flow coords.
+function absoluteOf(node, allNodes) {
+  let x = node.position?.x ?? 0;
+  let y = node.position?.y ?? 0;
+  let parentId = node.parentNode;
+  const seen = new Set();
+  while (parentId && !seen.has(parentId)) {
+    seen.add(parentId);
+    const p = allNodes.find((n) => n.id === parentId);
+    if (!p) break;
+    x += p.position?.x ?? 0;
+    y += p.position?.y ?? 0;
+    parentId = p.parentNode;
+  }
+  return { x, y };
 }
 
 function overlap(a1, a2, b1, b2) {
