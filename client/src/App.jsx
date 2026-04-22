@@ -1519,15 +1519,19 @@ function EdgeInspector({ edge, view = 'management', edgeKinds = [], onChange, on
 
 
 const THEMES = ['dark', 'light', 'professional'];
+const DEFAULT_THEME = 'professional';
 const THEME_ICON = { dark: '🌙', light: '☀︎', professional: '💼' };
 const THEME_NAME = { dark: 'Dark', light: 'Light', professional: 'Professional' };
-function nextTheme(t) { return THEMES[(THEMES.indexOf(t) + 1) % THEMES.length] || 'dark'; }
+function nextTheme(t) { return THEMES[(THEMES.indexOf(t) + 1) % THEMES.length] || DEFAULT_THEME; }
 
 function useTheme() {
   const [theme, setTheme] = useState(() => {
-    if (typeof window === 'undefined') return 'dark';
+    if (typeof window === 'undefined') return DEFAULT_THEME;
     const v = localStorage.getItem('theme');
-    return THEMES.includes(v) ? v : 'dark';
+    // Professional is the default register for this tool — Dark /
+    // Light are opt-in via the topbar cycle. Users who previously
+    // picked something else keep their preference via localStorage.
+    return THEMES.includes(v) ? v : DEFAULT_THEME;
   });
   useEffect(() => {
     const html = document.documentElement;
