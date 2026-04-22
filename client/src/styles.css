@@ -148,10 +148,12 @@ html, body, #root {
   border-bottom: 1px solid var(--border);
 }
 
-/* Uniform topbar action buttons — same min-width and height across
-   New / Designs / Export / Present / status chip / Delete / Admin /
-   profile, so the chrome reads as a tidy row. The theme button is
-   intentionally excluded; it's an icon-tile, not a labelled action. */
+/* Uniform topbar action buttons — same min-width, height, and font
+   weight across New / Designs / Export / Present / status chip /
+   Delete / Admin / profile, so the chrome reads as a tidy row.
+   Weight explicitly set here so <button> and <a class="btn"> don't
+   pick up different user-agent defaults, and the save-status chip
+   sits at the same visual density as its button siblings. */
 .topbar .btn:not(.theme-btn),
 .topbar a.btn,
 .topbar .save-status {
@@ -163,6 +165,9 @@ html, body, #root {
   justify-content: center;
   white-space: nowrap;
   line-height: 1;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
 }
 
 .topbar h1 {
