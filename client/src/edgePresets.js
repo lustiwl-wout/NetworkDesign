@@ -3,12 +3,13 @@
 // sensibly even before the API responds.
 
 const FALLBACK = [
-  { key: 'network',    label: 'Network link',     description: 'Standard physical or logical network connection.',         stroke: '#94a3b8', strokeWidth: 2,   strokeDasharray: null,     animated: false },
-  { key: 'management', label: 'Management / OOB', description: 'Out-of-band administrative or control-plane link.',        stroke: '#94a3b8', strokeWidth: 1.5, strokeDasharray: '4 4',    animated: false },
-  { key: 'logs',       label: 'Log / telemetry',  description: 'One-way forward of logs or telemetry (e.g., to SIEM).',    stroke: '#a78bfa', strokeWidth: 1.5, strokeDasharray: '4 4',    animated: false },
-  { key: 'replication',label: 'Data replication', description: 'Active data movement. Animated to signal live flow.',     stroke: '#22c55e', strokeWidth: 2,   strokeDasharray: '6 4',    animated: true  },
-  { key: 'wan',        label: 'WAN / Internet',   description: 'Wide-area / public Internet link.',                        stroke: '#38bdf8', strokeWidth: 2.5, strokeDasharray: null,     animated: false },
-  { key: 'planned',    label: 'Planned / future', description: 'Proposed future connection, not yet in place.',            stroke: '#64748b', strokeWidth: 1.5, strokeDasharray: '2 6',    animated: false },
+  { key: 'network',    label: 'Network link',     description: 'Standard physical or logical network connection.',         stroke: '#94a3b8', strokeWidth: 2,   strokeDasharray: null,     animated: false, curved: false },
+  { key: 'management', label: 'Management / OOB', description: 'Out-of-band administrative or control-plane link.',        stroke: '#94a3b8', strokeWidth: 1.5, strokeDasharray: '4 4',    animated: false, curved: false },
+  { key: 'logs',       label: 'Log / telemetry',  description: 'One-way forward of logs or telemetry (e.g., to SIEM).',    stroke: '#a78bfa', strokeWidth: 1.5, strokeDasharray: '4 4',    animated: false, curved: false },
+  { key: 'replication',label: 'Data replication', description: 'Active data movement — curved so it reads as a separate path from a primary link.', stroke: '#22c55e', strokeWidth: 2,   strokeDasharray: '6 4',    animated: true,  curved: true  },
+  { key: 'wan',        label: 'WAN / Internet',   description: 'Wide-area / public Internet link.',                        stroke: '#38bdf8', strokeWidth: 2.5, strokeDasharray: null,     animated: false, curved: false },
+  { key: 'planned',    label: 'Planned / future', description: 'Proposed future connection, not yet in place.',            stroke: '#64748b', strokeWidth: 1.5, strokeDasharray: '2 6',    animated: false, curved: false },
+  { key: 'redundant',  label: 'Redundant / backup', description: 'Parallel or failover path — curved so it bows off the primary link for visibility.', stroke: '#94a3b8', strokeWidth: 1.5, strokeDasharray: '8 4', animated: false, curved: true  },
 ];
 
 let _kinds = FALLBACK.slice();
@@ -39,7 +40,7 @@ export function applyKind(edge, kindKey) {
   const kind = getEdgeKind(kindKey);
   return {
     ...edge,
-    data: { ...(edge.data ?? {}), kind: kindKey },
+    data: { ...(edge.data ?? {}), kind: kindKey, curved: !!kind.curved },
     style: styleFromKind(kind),
     animated: !!kind.animated,
   };

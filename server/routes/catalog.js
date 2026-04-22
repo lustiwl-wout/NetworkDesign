@@ -108,6 +108,6 @@ export const edgeKindsRouter = catalogRouter({
   required: ['key', 'label'],
   allowedFields: [
     'key', 'label', 'description', 'stroke', 'strokeWidth',
-    'strokeDasharray', 'animated', 'sortOrder',
+    'strokeDasharray', 'animated', 'curved', 'sortOrder',
   ],
 });

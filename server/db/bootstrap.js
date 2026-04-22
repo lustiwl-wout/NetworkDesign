@@ -92,10 +92,12 @@ CREATE TABLE IF NOT EXISTS edge_kinds (
   stroke_width      NUMERIC NOT NULL DEFAULT 2,
   stroke_dasharray  TEXT,
   animated          BOOLEAN NOT NULL DEFAULT FALSE,
+  curved            BOOLEAN NOT NULL DEFAULT FALSE,
   sort_order        INTEGER NOT NULL DEFAULT 0,
   created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+ALTER TABLE edge_kinds ADD COLUMN IF NOT EXISTS curved BOOLEAN NOT NULL DEFAULT FALSE;
 
 CREATE TABLE IF NOT EXISTS zone_types (
   id              SERIAL PRIMARY KEY,
@@ -156,12 +158,13 @@ const SEED_DEVICES = [
 ];
 
 const SEED_EDGE_KINDS = [
-  { key: 'network',    label: 'Network link',     description: 'Standard physical or logical network connection.',         stroke: '#94a3b8', stroke_width: 2,   stroke_dasharray: null,     animated: false, sort_order: 10 },
-  { key: 'management', label: 'Management / OOB', description: 'Out-of-band administrative or control-plane link.',        stroke: '#94a3b8', stroke_width: 1.5, stroke_dasharray: '4 4',    animated: false, sort_order: 20 },
-  { key: 'logs',       label: 'Log / telemetry',  description: 'One-way forward of logs or telemetry (e.g., to SIEM).',    stroke: '#a78bfa', stroke_width: 1.5, stroke_dasharray: '4 4',    animated: false, sort_order: 30 },
-  { key: 'replication',label: 'Data replication', description: 'Active data movement. Animated to signal live flow.',     stroke: '#22c55e', stroke_width: 2,   stroke_dasharray: '6 4',    animated: true,  sort_order: 40 },
-  { key: 'wan',        label: 'WAN / Internet',   description: 'Wide-area / public Internet link.',                        stroke: '#38bdf8', stroke_width: 2.5, stroke_dasharray: null,     animated: false, sort_order: 50 },
-  { key: 'planned',    label: 'Planned / future', description: 'Proposed future connection, not yet in place.',            stroke: '#64748b', stroke_width: 1.5, stroke_dasharray: '2 6',    animated: false, sort_order: 60 },
+  { key: 'network',    label: 'Network link',     description: 'Standard physical or logical network connection.',         stroke: '#94a3b8', stroke_width: 2,   stroke_dasharray: null,     animated: false, curved: false, sort_order: 10 },
+  { key: 'management', label: 'Management / OOB', description: 'Out-of-band administrative or control-plane link.',        stroke: '#94a3b8', stroke_width: 1.5, stroke_dasharray: '4 4',    animated: false, curved: false, sort_order: 20 },
+  { key: 'logs',       label: 'Log / telemetry',  description: 'One-way forward of logs or telemetry (e.g., to SIEM).',    stroke: '#a78bfa', stroke_width: 1.5, stroke_dasharray: '4 4',    animated: false, curved: false, sort_order: 30 },
+  { key: 'replication',label: 'Data replication', description: 'Active data movement — curved to visually distinguish from primary links.', stroke: '#22c55e', stroke_width: 2,   stroke_dasharray: '6 4',    animated: true,  curved: true,  sort_order: 40 },
+  { key: 'wan',        label: 'WAN / Internet',   description: 'Wide-area / public Internet link.',                        stroke: '#38bdf8', stroke_width: 2.5, stroke_dasharray: null,     animated: false, curved: false, sort_order: 50 },
+  { key: 'planned',    label: 'Planned / future', description: 'Proposed future connection, not yet in place.',            stroke: '#64748b', stroke_width: 1.5, stroke_dasharray: '2 6',    animated: false, curved: false, sort_order: 60 },
+  { key: 'redundant',  label: 'Redundant / backup', description: 'Parallel / failover path. Curved so it bows off the primary link.', stroke: '#94a3b8', stroke_width: 1.5, stroke_dasharray: '8 4', animated: false, curved: true,  sort_order: 70 },
 ];
 
 const SEED_ZONES = [

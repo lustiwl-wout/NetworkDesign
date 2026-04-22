@@ -414,6 +414,7 @@ const BLANK_EDGE = {
   strokeWidth: 2,
   strokeDasharray: '',
   animated: false,
+  curved: false,
   sortOrder: 100,
 };
 
@@ -460,6 +461,7 @@ function EdgeKindAdmin() {
               <th>Label</th>
               <th>Key</th>
               <th>Animated</th>
+              <th>Curved</th>
               <th style={{ width: 120 }}></th>
             </tr>
           </thead>
@@ -470,6 +472,7 @@ function EdgeKindAdmin() {
                 <td><strong>{it.label}</strong><div className="sub">{it.description}</div></td>
                 <td><code>{it.key}</code></td>
                 <td>{it.animated ? '✓' : '—'}</td>
+                <td>{it.curved ? '✓' : '—'}</td>
                 <td className="row-actions">
                   <button className="btn secondary small" onClick={() => setEditing({ ...it })}>Edit</button>
                   <button className="btn danger small" onClick={() => remove(it)}>Del</button>
@@ -577,6 +580,12 @@ function EdgeKindForm({ value, onChange, onSave, onCancel }) {
         <input type="checkbox" checked={!!value.animated}
           onChange={(e) => set({ animated: e.target.checked })} />
         Animated flow (pulses along the line)
+      </label>
+
+      <label className="toggle-row">
+        <input type="checkbox" checked={!!value.curved}
+          onChange={(e) => set({ curved: e.target.checked })} />
+        Curved path — bows off the direct line. Good for redundant / parallel links so they don't overlap the primary edge.
       </label>
 
       <div className="form-actions">

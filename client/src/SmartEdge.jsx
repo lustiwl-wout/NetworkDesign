@@ -2,23 +2,23 @@ import { useContext, useEffect, useRef } from 'react';
 import { useStore, useReactFlow, EdgeLabelRenderer, Position } from 'reactflow';
 import { EditorCtx } from './EditorCtx.js';
 
-// Orthogonal edge with a BOUNDED, ADJUSTABLE path.
+// Edge with two rendering modes, picked by the edge kind:
 //
-// Routing is fully determined by the two anchor positions and sides:
-//   * If the stubs are already collinear → single straight segment.
-//   * If the stubs exit on perpendicular axes → L-shape, 1 elbow.
-//   * If the stubs exit on the same axis but aren't collinear → Z-shape,
-//     2 elbows with a middle segment that can be shifted perpendicular
-//     by the user.
+//   * Orthogonal (default). Routing is fully determined by the two
+//     anchor positions and sides: collinear stubs → straight line;
+//     perpendicular axes → L-shape; same axis with offset → Z-shape
+//     with a user-draggable middle segment. Data: `data.bend` is the
+//     perpendicular offset for the Z-middle segment.
+//   * Curved (edge kinds with `data.curved === true`). Smooth cubic
+//     bezier from source anchor to target anchor. Control points sit
+//     along the perpendicular of each node's anchor side, so the
+//     curve still "leaves" each node perpendicular — just as a
+//     graceful arc instead of 90° bends. Meant for redundant /
+//     parallel / replication links so they visually bow off an
+//     existing primary edge.
 //
-// The only user control is the Z-middle segment: grab it and drag
-// perpendicular to shift where the bend happens. Straight and L-
-// shape edges are not adjustable — to change those, move the
-// endpoints or use a different connection handle on the node.
-//
-// Data: `data.bend` is a single number (pixels) that shifts the
-// Z-middle segment away from its natural midpoint. Undefined / null
-// means "use natural midpoint".
+// No per-edge waypoints on curved edges yet — pick a different
+// anchor handle or use a different kind for specific path control.
 
 const STUB = 30;
 const GRID = 10;
@@ -49,9 +49,21 @@ export default function SmartEdge(props) {
   const ss = stubOut(sa);
   const ts = stubOut(ta);
 
-  const userBend = Number.isFinite(props.data?.bend) ? props.data.bend : null;
-  const { points, middle } = route(sa, ss, ts, ta, userBend);
-  const d = polyline(points);
+  const isCurved = !!props.data?.curved;
+
+  let d;
+  let labelPoint;
+  let bendMiddle = null;
+  if (isCurved) {
+    d = curvedPath(sa, ta);
+    labelPoint = midpointOnCubic(sa, ta);
+  } else {
+    const userBend = Number.isFinite(props.data?.bend) ? props.data.bend : null;
+    const { points, middle } = route(sa, ss, ts, ta, userBend);
+    d = polyline(points);
+    labelPoint = points[Math.floor(points.length / 2)];
+    bendMiddle = middle;
+  }
 
   return (
     <>
@@ -78,20 +90,67 @@ export default function SmartEdge(props) {
           <div
             className="react-flow__edge-label-floating"
             style={{
-              transform: `translate(-50%, -50%) translate(${points[Math.floor(points.length / 2)].x}px, ${points[Math.floor(points.length / 2)].y}px)`,
+              transform: `translate(-50%, -50%) translate(${labelPoint.x}px, ${labelPoint.y}px)`,
             }}
           >
             {label}
           </div>
         </EdgeLabelRenderer>
       )}
-      {middle && (
+      {bendMiddle && (
         <EdgeLabelRenderer>
-          <BendHandle edgeId={id} middle={middle} />
+          <BendHandle edgeId={id} middle={bendMiddle} />
         </EdgeLabelRenderer>
       )}
     </>
   );
+}
+
+// ---- Curved routing ----
+
+function sideUnit(side) {
+  switch (side) {
+    case Position.Top:    return { x: 0, y: -1 };
+    case Position.Bottom: return { x: 0, y:  1 };
+    case Position.Left:   return { x: -1, y: 0 };
+    case Position.Right:  return { x:  1, y: 0 };
+    default:              return { x: 0, y: 0 };
+  }
+}
+
+// Cubic bezier from source anchor to target anchor. The two control
+// points sit along each anchor's outward normal so the curve leaves
+// and arrives perpendicular to the node side. Control distance
+// scales with the endpoint separation, clamped so small gaps still
+// bow enough to read and large gaps don't loop.
+function curvedPath(sa, ta) {
+  const dx = ta.x - sa.x;
+  const dy = ta.y - sa.y;
+  const dist = Math.hypot(dx, dy);
+  const ext = Math.max(48, Math.min(180, dist * 0.45));
+  const u1 = sideUnit(sa.side);
+  const u2 = sideUnit(ta.side);
+  const c1 = { x: sa.x + u1.x * ext, y: sa.y + u1.y * ext };
+  const c2 = { x: ta.x + u2.x * ext, y: ta.y + u2.y * ext };
+  return `M ${sa.x} ${sa.y} C ${c1.x} ${c1.y}, ${c2.x} ${c2.y}, ${ta.x} ${ta.y}`;
+}
+
+function midpointOnCubic(sa, ta) {
+  // t = 0.5 on the bezier — close enough for label positioning without
+  // recomputing both control points separately.
+  const dx = ta.x - sa.x;
+  const dy = ta.y - sa.y;
+  const dist = Math.hypot(dx, dy);
+  const ext = Math.max(48, Math.min(180, dist * 0.45));
+  const u1 = sideUnit(sa.side);
+  const u2 = sideUnit(ta.side);
+  const c1x = sa.x + u1.x * ext, c1y = sa.y + u1.y * ext;
+  const c2x = ta.x + u2.x * ext, c2y = ta.y + u2.y * ext;
+  // Bernstein at t=0.5: P(0.5) = 1/8*(P0 + 3C1 + 3C2 + P1)
+  return {
+    x: (sa.x + 3 * c1x + 3 * c2x + ta.x) / 8,
+    y: (sa.y + 3 * c1y + 3 * c2y + ta.y) / 8,
+  };
 }
 
 // ---- Routing ----
