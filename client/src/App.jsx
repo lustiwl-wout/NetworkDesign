@@ -196,7 +196,11 @@ function Editor({ me }) {
   const [zoneTypes, setZoneTypes] = useState([]);
   const [edgeKinds, setEdgeKindsState] = useState(getEdgeKinds());
   const [currentId, setCurrentId] = useState(null);
-  const [name, setName] = useState('Untitled design');
+  // Name starts empty so the user never has to clear a placeholder-
+  // looking default. The text "Untitled design" lives on the <input>
+  // placeholder only; autosave won't fire until the user types a
+  // real name (see hasRealName below).
+  const [name, setName] = useState('');
   // Optional team scope. null = personal design. Loaded per-design,
   // defaults to null for a new blank editor.
   const [teamId, setTeamId] = useState(null);
@@ -265,7 +269,7 @@ function Editor({ me }) {
       // Fresh editor with an empty untitled design — mark it as
       // "saved" so autosave doesn't try to PUT an empty state before
       // the user has done anything.
-      lastSavedRef.current = { nodes: [], edges: [], name: 'Untitled design' };
+      lastSavedRef.current = { nodes: [], edges: [], name: '' };
       return;
     }
     (async () => {
@@ -476,11 +480,11 @@ function Editor({ me }) {
 
   const newDesign = () => {
     setCurrentId(null);
-    setName('Untitled design');
+    setName('');
     setTeamId(null);
     setNodes([]);
     setEdges([]);
-    lastSavedRef.current = { nodes: [], edges: [], name: 'Untitled design', teamId: null };
+    lastSavedRef.current = { nodes: [], edges: [], name: '', teamId: null };
     setSelectedNode(null);
     setSelectedEdge(null);
   };
@@ -529,6 +533,10 @@ function Editor({ me }) {
   // that design and its name is theirs to change.
   const hasRealName = useCallback(() => {
     const n = (nameRef.current ?? '').trim();
+    // Keep the legacy 'Untitled design' check around for any designs
+    // that were saved under that name before the input went blank-
+    // by-default — autosave still treats them as un-named so the
+    // user doesn't accidentally litter the list.
     return !!n && n !== 'Untitled design';
   }, []);
 
@@ -797,13 +805,7 @@ function Editor({ me }) {
           type="text"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="Design name"
-          onFocus={(e) => {
-            // First-time naming: the placeholder-ish "Untitled design"
-            // is a real value. Select all so typing replaces it in
-            // one stroke without the user deleting it manually.
-            if (name === 'Untitled design') e.target.select();
-          }}
+          placeholder="Untitled design"
         />
         {canSave && myTeams.length > 0 && (
           <select
