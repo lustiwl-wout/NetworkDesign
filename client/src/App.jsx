@@ -1237,6 +1237,13 @@ function EdgeInspector({ edge, view = 'management', edgeKinds = [], onChange, on
           onChange={(e) => onChange({ animated: e.target.checked })}
         /> Animated flow
       </label>
+      <label className="toggle-row">
+        <input
+          type="checkbox"
+          checked={!!d.curved}
+          onChange={(e) => setData({ curved: e.target.checked })}
+        /> Curved path — bows off the direct line (useful for a parallel / redundant link next to a primary one).
+      </label>
 
       <label>Line color (override)</label>
       <input
