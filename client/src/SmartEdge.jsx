@@ -222,11 +222,10 @@ function SegmentHandles({ edgeId, points, selected }) {
   ));
 }
 
-// Single waypoint square. We reuse the same drag primitive that
-// React Flow's NodeResizer uses under the hood (d3-drag): it takes
-// care of pointer capture, cross-browser touch/pen support, and —
-// crucially — cooperates with React Flow's own d3-zoom on the pane
-// so the canvas doesn't pan while we're dragging a handle.
+// Single waypoint square. Uses d3-drag (the same library NodeResizer
+// relies on) with `.container(document.body)` so the drag coordinate
+// system doesn't get lost inside EdgeLabelRenderer's portal. On the
+// first move we create a new waypoint; subsequent moves update it.
 function SegmentHandle({ edgeId, seg, selected }) {
   const ref = useRef(null);
   const { screenToFlowPosition } = useReactFlow();
@@ -242,37 +241,45 @@ function SegmentHandle({ edgeId, seg, selected }) {
     let ownedIdx = null;
     let startMid = null;
 
+    const applyMove = (clientX, clientY) => {
+      const { screenToFlowPosition: s2f, setEdges: se, edgeId: eid } = liveRef.current;
+      const pt = s2f({ x: clientX, y: clientY });
+      if (!Number.isFinite(pt?.x) || !Number.isFinite(pt?.y)) return;
+      const newPt = { x: snap(pt.x), y: snap(pt.y) };
+      se((eds) => eds.map((ed) => {
+        if (ed.id !== eid) return ed;
+        const wps = [...(ed.data?.waypoints ?? [])];
+        if (ownedIdx === null) {
+          const j = wps.findIndex((w) =>
+            Math.abs(w.x - startMid.x) + Math.abs(w.y - startMid.y) < 80
+          );
+          if (j >= 0) {
+            ownedIdx = j;
+          } else {
+            wps.push(newPt);
+            ownedIdx = wps.length - 1;
+            return { ...ed, data: { ...(ed.data ?? {}), waypoints: wps } };
+          }
+        }
+        wps[ownedIdx] = newPt;
+        return { ...ed, data: { ...(ed.data ?? {}), waypoints: wps } };
+      }));
+    };
+
     const handler = d3Drag()
+      .container(() => document.body)
       .filter((event) => !event.button || event.button === 0)
-      .on('start', () => {
+      .on('start', (event) => {
+        event.sourceEvent?.stopPropagation?.();
         ownedIdx = null;
         startMid = { x: liveRef.current.seg.mid.x, y: liveRef.current.seg.mid.y };
       })
       .on('drag', (event) => {
         const src = event.sourceEvent;
-        const cx = src.clientX ?? (src.touches?.[0]?.clientX ?? 0);
-        const cy = src.clientY ?? (src.touches?.[0]?.clientY ?? 0);
-        const { screenToFlowPosition: s2f, setEdges: se, edgeId: eid } = liveRef.current;
-        const pt = s2f({ x: cx, y: cy });
-        const newPt = { x: snap(pt.x), y: snap(pt.y) };
-        se((eds) => eds.map((ed) => {
-          if (ed.id !== eid) return ed;
-          const wps = [...(ed.data?.waypoints ?? [])];
-          if (ownedIdx === null) {
-            const j = wps.findIndex((w) =>
-              Math.abs(w.x - startMid.x) + Math.abs(w.y - startMid.y) < 80
-            );
-            if (j >= 0) {
-              ownedIdx = j;
-            } else {
-              wps.push(newPt);
-              ownedIdx = wps.length - 1;
-              return { ...ed, data: { ...(ed.data ?? {}), waypoints: wps } };
-            }
-          }
-          wps[ownedIdx] = newPt;
-          return { ...ed, data: { ...(ed.data ?? {}), waypoints: wps } };
-        }));
+        const cx = src?.clientX ?? src?.touches?.[0]?.clientX;
+        const cy = src?.clientY ?? src?.touches?.[0]?.clientY;
+        if (cx == null || cy == null) return;
+        applyMove(cx, cy);
       });
 
     d3Select(el).call(handler);
