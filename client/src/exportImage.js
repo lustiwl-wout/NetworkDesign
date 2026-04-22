@@ -5,13 +5,23 @@ import { getEdgeKind } from './edgePresets.js';
 const PAD = 40;
 const LEGEND_ROW_H = 28;
 
-// Theme palette — picked at export time from the current document.
+// Theme palette — read live from the document's CSS variables so
+// any theme (dark / light / professional / future) exports with
+// matching colours automatically.
 function currentPalette() {
-  const light = typeof document !== 'undefined'
-    && document.documentElement.classList.contains('theme-light');
-  return light
-    ? { light, bg: '#f4f6fb', legendBg: '#f1f5f9', text: '#0f172a', muted: '#64748b' }
-    : { light, bg: '#0f172a', legendBg: '#141e33', text: '#e2e8f0', muted: '#94a3b8' };
+  const fallback = { bg: '#0f172a', legendBg: '#141e33', text: '#e2e8f0', muted: '#94a3b8', light: false };
+  if (typeof document === 'undefined') return fallback;
+  const cs = getComputedStyle(document.documentElement);
+  const v = (name, fb) => (cs.getPropertyValue(name).trim() || fb);
+  const cls = document.documentElement.classList;
+  return {
+    bg:       v('--bg',       fallback.bg),
+    legendBg: v('--panel-2',  fallback.legendBg),
+    text:     v('--text',     fallback.text),
+    muted:    v('--muted',    fallback.muted),
+    // Back-compat flag for callers that branched on light vs dark.
+    light: cls.contains('theme-light') || cls.contains('theme-professional'),
+  };
 }
 
 export async function exportCanvasPng({

@@ -35,6 +35,28 @@ html.theme-light {
   --grid: #d1d9e6;
 }
 
+/* Professional — conservative palette intended for print, slides,
+   and board-room screens. Paper-white canvas, deep navy accent,
+   muted neutrals, no bright highlights. */
+html.theme-professional {
+  --bg: #eceef2;
+  --panel: #ffffff;
+  --panel-2: #f3f5f9;
+  --border: #c8d0de;
+  --text: #1f2937;
+  --muted: #64748b;
+  --accent: #1e3a5f;
+  --accent-2: #162a47;
+  --danger: #b91c1c;
+  --risk-h: #b91c1c;
+  --risk-m: #b45309;
+  --risk-l: #15803d;
+
+  --node-bg: #ffffff;
+  --floating-bg: rgba(255, 255, 255, 0.97);
+  --grid: #d9dfe8;
+}
+
 * { box-sizing: border-box; }
 
 html, body, #root {

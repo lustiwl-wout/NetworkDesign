@@ -629,11 +629,11 @@ function Editor({ me }) {
         <button
           type="button"
           className="btn secondary theme-btn"
-          onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
-          title={theme === 'light' ? 'Switch to Dark theme' : 'Switch to Light theme'}
-          aria-label="Toggle theme"
+          onClick={() => setTheme(nextTheme(theme))}
+          title={`Theme: ${THEME_LABEL[theme]}. Click to switch to ${THEME_LABEL[nextTheme(theme)]}.`}
+          aria-label="Cycle theme"
         >
-          {theme === 'light' ? <>☀︎ <span>Light</span></> : <>🌙 <span>Dark</span></>}
+          {THEME_LABEL[theme]}
         </button>
         <div className="view-switch" role="tablist" aria-label="View">
           <button
@@ -1199,14 +1199,20 @@ function EdgeInspector({ edge, view = 'management', edgeKinds = [], onChange, on
   );
 }
 
+const THEMES = ['dark', 'light', 'professional'];
+const THEME_LABEL = { dark: '🌙 Dark', light: '☀︎ Light', professional: '💼 Professional' };
+function nextTheme(t) { return THEMES[(THEMES.indexOf(t) + 1) % THEMES.length] || 'dark'; }
+
 function useTheme() {
   const [theme, setTheme] = useState(() => {
     if (typeof window === 'undefined') return 'dark';
-    return localStorage.getItem('theme') === 'light' ? 'light' : 'dark';
+    const v = localStorage.getItem('theme');
+    return THEMES.includes(v) ? v : 'dark';
   });
   useEffect(() => {
     const html = document.documentElement;
     html.classList.toggle('theme-light', theme === 'light');
+    html.classList.toggle('theme-professional', theme === 'professional');
     localStorage.setItem('theme', theme);
   }, [theme]);
   return [theme, setTheme];
