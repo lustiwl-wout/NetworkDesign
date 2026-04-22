@@ -35,29 +35,60 @@ html.theme-light {
   --grid: #d1d9e6;
 }
 
-/* Professional — enterprise look & feel. Deliberately different
-   from Light: a muted neutral grey canvas, crisp white panels, no
-   cyan pop — every accent is a conservative corporate navy. Aims
-   to match the visual register of tools like IBM Carbon or
-   enterprise SaaS dashboards. */
+/* Professional — "network documentation" register. Think Visio /
+   Lucidchart / a diagram pasted into a presales deck: pure white
+   canvas, thin flat shapes, no gradients, no shadows, simple dark
+   borders. Overrides the glossy per-theme styling the other themes
+   share (those use inline-colored gradients and drop shadows). */
 html.theme-professional {
-  --bg: #dde2ea;
+  --bg: #ffffff;
   --panel: #ffffff;
-  --panel-2: #eef1f6;
-  --border: #b4bdcb;
-  --text: #1a2333;
-  --muted: #5a6679;
-  --accent: #003a70;
-  --accent-2: #002752;
-  --danger: #8b1e23;
-  --risk-h: #8b1e23;
-  --risk-m: #8e5a0b;
-  --risk-l: #286238;
+  --panel-2: #f7f8fa;
+  --border: #cbd5e1;
+  --text: #111827;
+  --muted: #6b7280;
+  --accent: #1e3a8a;
+  --accent-2: #172554;
+  --danger: #991b1b;
+  --risk-h: #991b1b;
+  --risk-m: #92400e;
+  --risk-l: #166534;
 
   --node-bg: #ffffff;
-  --floating-bg: rgba(255, 255, 255, 0.97);
-  --grid: #c4ccd9;
+  --floating-bg: rgba(255, 255, 255, 0.98);
+  --grid: #edf0f4;
 }
+
+html.theme-professional .net-node {
+  background: #ffffff !important;
+  border-width: 1.5px !important;
+  border-color: #334155 !important;
+  border-radius: 4px !important;
+  box-shadow: none !important;
+  transition: none !important;
+}
+html.theme-professional .net-node:hover { transform: none !important; }
+html.theme-professional .net-node.selected {
+  border-color: #0f172a !important;
+  box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.25) !important;
+}
+html.theme-professional .net-node .icon-wrap { filter: none !important; }
+html.theme-professional .net-node .label { color: #0f172a; }
+
+html.theme-professional .zone-node {
+  background: transparent !important;
+  border-width: 1.5px !important;
+  border-radius: 4px !important;
+  box-shadow: none !important;
+}
+html.theme-professional .zone-node.selected { box-shadow: none !important; }
+html.theme-professional .zone-header {
+  background: #ffffff !important;
+  border-radius: 2px;
+}
+
+/* Make the grid barely visible — clean-paper feel. */
+html.theme-professional .react-flow__background { opacity: 0.6; }
 
 * { box-sizing: border-box; }
 
