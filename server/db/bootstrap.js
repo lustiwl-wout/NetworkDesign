@@ -71,8 +71,8 @@ CREATE TABLE IF NOT EXISTS design_shares (
 );
 
 -- Ad-hoc share of an entire folder (scoped to the owner's folders)
--- with a specific user. Every design owned by `owner_id` with
--- folder = `folder` becomes visible to `shared_with`.
+-- with a specific user. Every design owned by owner_id with
+-- folder = folder becomes visible to shared_with.
 CREATE TABLE IF NOT EXISTS folder_shares (
   owner_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   folder      TEXT NOT NULL,
