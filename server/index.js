@@ -9,6 +9,7 @@ import { deviceTypesRouter, zoneTypesRouter, edgeKindsRouter } from './routes/ca
 import { authRouter } from './routes/auth.js';
 import { adminUsersRouter } from './routes/adminUsers.js';
 import { adminTeamsRouter, teamsRouter } from './routes/teams.js';
+import { usersRouter } from './routes/users.js';
 import { visitsRouter, adminVisitsRouter } from './routes/visits.js';
 import { attachSession } from './auth/middleware.js';
 import { pool } from './db/pool.js';
@@ -42,6 +43,7 @@ app.use('/api/admin/users', adminUsersRouter);
 app.use('/api/admin/teams', adminTeamsRouter);
 app.use('/api/admin/visits', adminVisitsRouter);
 app.use('/api/teams', teamsRouter);
+app.use('/api/users', usersRouter);
 app.use('/api/designs', designsRouter);
 app.use('/api/device-types', deviceTypesRouter);
 app.use('/api/zone-types', zoneTypesRouter);

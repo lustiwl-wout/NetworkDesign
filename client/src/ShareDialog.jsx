@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import UserCombobox from './UserCombobox.jsx';
 
 // Generic "share by email" dialog used for both per-design and
 // per-folder sharing. The caller supplies the target label plus
@@ -51,17 +52,26 @@ export default function ShareDialog({
         {subtitle && <p className="hint">{subtitle}</p>}
 
         <form onSubmit={add} className="form" style={{ marginTop: 6 }}>
-          <label>Add by email</label>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <input
-              type="email"
-              autoFocus
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="user@example.com"
-              style={{ flex: 1 }}
-            />
+          <label>Add a user</label>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'stretch' }}>
+            <div style={{ flex: 1 }}>
+              <UserCombobox
+                value={email}
+                onChange={setEmail}
+                autoFocus
+                onSelect={async (u) => {
+                  // Picking a suggestion fires the share immediately
+                  // so the user doesn't have to click Share after
+                  // selecting — matches the rhythm of Move-to-folder.
+                  setEmail('');
+                  setBusy(true);
+                  setErr('');
+                  try { await onAdd(u.email); await load(); }
+                  catch (e) { setErr(e.message); setEmail(u.email); }
+                  finally { setBusy(false); }
+                }}
+              />
+            </div>
             <button type="submit" className="btn" disabled={busy}>{busy ? '…' : 'Share'}</button>
           </div>
         </form>

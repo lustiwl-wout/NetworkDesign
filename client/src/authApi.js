@@ -93,6 +93,15 @@ export const teamsApi = {
   mine: () => teamsReq('/mine'),
 };
 
+async function usersReq(path) {
+  const res = await fetch(`/api/users${path}`, { credentials: 'include' });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+export const usersApi = {
+  search: (q = '') => usersReq(`?q=${encodeURIComponent(q)}`),
+};
+
 export const usersAdminApi = {
   list:   ()              => adminReq(''),
   create: (body)          => adminReq('', { method: 'POST', body: JSON.stringify(body) }),
