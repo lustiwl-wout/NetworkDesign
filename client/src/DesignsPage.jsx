@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from './api.js';
 import FolderCombobox from './FolderCombobox.jsx';
+import ShareDialog from './ShareDialog.jsx';
 
 const UNFILED = '__unfiled__';
 
@@ -10,6 +11,8 @@ export default function DesignsPage({ me }) {
   const [err, setErr] = useState(null);
   const [query, setQuery] = useState('');
   const [moveTarget, setMoveTarget] = useState(null); // { design, folder }
+  const [shareDesign, setShareDesign]   = useState(null); // design object
+  const [shareFolderName, setShareFolderName] = useState(null); // folder string
 
   const load = async () => {
     if (!me) { setLoading(false); return; } // anonymous — no fetch
@@ -206,6 +209,11 @@ export default function DesignsPage({ me }) {
                     >Rename</button>
                     <button
                       type="button"
+                      className="linklike"
+                      onClick={() => setShareFolderName(g.folder)}
+                    >Share</button>
+                    <button
+                      type="button"
                       className="linklike danger"
                       onClick={() => deleteFolder(g.folder, g.designs.length)}
                     >Remove folder</button>
@@ -232,22 +240,34 @@ export default function DesignsPage({ me }) {
                       </span>
                       <div className="actions">
                         <a className="btn" href={`/?design=${d.id}`}>Open</a>
-                        <button
-                          className="btn secondary"
-                          onClick={() => rename(d.id, d.name)}
-                        >Rename</button>
-                        <button
-                          className="btn secondary"
-                          onClick={() => setMoveTarget({ design: d, folder: d.folder ?? '' })}
-                        >Move</button>
+                        {d.owner_id === me?.id && (
+                          <button
+                            className="btn secondary"
+                            onClick={() => rename(d.id, d.name)}
+                          >Rename</button>
+                        )}
+                        {d.owner_id === me?.id && (
+                          <button
+                            className="btn secondary"
+                            onClick={() => setMoveTarget({ design: d, folder: d.folder ?? '' })}
+                          >Move</button>
+                        )}
+                        {d.owner_id === me?.id && (
+                          <button
+                            className="btn secondary"
+                            onClick={() => setShareDesign(d)}
+                          >Share</button>
+                        )}
                         <button
                           className="btn secondary"
                           onClick={() => duplicate(d.id, d.name)}
                         >Duplicate</button>
-                        <button
-                          className="btn danger"
-                          onClick={() => remove(d.id, d.name)}
-                        >Delete</button>
+                        {d.owner_id === me?.id && (
+                          <button
+                            className="btn danger"
+                            onClick={() => remove(d.id, d.name)}
+                          >Delete</button>
+                        )}
                       </div>
                     </footer>
                   </article>
@@ -264,6 +284,28 @@ export default function DesignsPage({ me }) {
             folders={myFolders}
             onClose={() => setMoveTarget(null)}
             onSave={(f) => commitMove(moveTarget.design, f)}
+          />
+        )}
+
+        {shareDesign && (
+          <ShareDialog
+            title={`Share "${shareDesign.name}"`}
+            subtitle="Give specific users access. They'll be able to open, edit and autosave this design."
+            loader={() => api.listDesignShares(shareDesign.id)}
+            onAdd={(email) => api.shareDesign(shareDesign.id, email)}
+            onRemove={(userId) => api.unshareDesign(shareDesign.id, userId)}
+            onClose={() => setShareDesign(null)}
+          />
+        )}
+
+        {shareFolderName && (
+          <ShareDialog
+            title={`Share folder "${shareFolderName}"`}
+            subtitle="Every design you place in this folder — now and in the future — becomes visible to the people you list here."
+            loader={() => api.listFolderShares(shareFolderName)}
+            onAdd={(email) => api.shareFolder(shareFolderName, email)}
+            onRemove={(userId) => api.unshareFolder(shareFolderName, userId)}
+            onClose={() => setShareFolderName(null)}
           />
         )}
       </main>

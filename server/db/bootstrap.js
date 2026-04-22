@@ -62,6 +62,25 @@ CREATE TABLE IF NOT EXISTS team_members (
   PRIMARY KEY (team_id, user_id)
 );
 
+-- Ad-hoc share of a single design with a specific user.
+CREATE TABLE IF NOT EXISTS design_shares (
+  design_id INTEGER NOT NULL REFERENCES designs(id) ON DELETE CASCADE,
+  user_id   INTEGER NOT NULL REFERENCES users(id)   ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (design_id, user_id)
+);
+
+-- Ad-hoc share of an entire folder (scoped to the owner's folders)
+-- with a specific user. Every design owned by `owner_id` with
+-- folder = `folder` becomes visible to `shared_with`.
+CREATE TABLE IF NOT EXISTS folder_shares (
+  owner_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  folder      TEXT NOT NULL,
+  shared_with INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (owner_id, folder, shared_with)
+);
+
 -- Wire up the designs.team_id FK now that teams exists (can't
 -- reference it in the CREATE TABLE designs block because that
 -- runs before teams on a fresh install).

@@ -23,13 +23,26 @@ const MAX_VERSIONS = 50;
 
 function whereVisibleToUser(user, alias = 'designs') {
   if (user.role === 'admin') return { clause: '', params: [] };
-  // Non-admins see their own designs OR any design scoped to a team
-  // they're a member of.
+  // Non-admins see:
+  //   * their own designs, OR
+  //   * any design scoped to a team they're a member of, OR
+  //   * any design explicitly shared with them, OR
+  //   * any design in a folder its owner has shared with them.
   return {
     clause: `
       WHERE ${alias}.owner_id = $1
          OR ${alias}.team_id IN (
               SELECT team_id FROM team_members WHERE user_id = $1
+            )
+         OR EXISTS (
+              SELECT 1 FROM design_shares ds
+               WHERE ds.design_id = ${alias}.id AND ds.user_id = $1
+            )
+         OR EXISTS (
+              SELECT 1 FROM folder_shares fs
+               WHERE fs.owner_id    = ${alias}.owner_id
+                 AND fs.folder      = ${alias}.folder
+                 AND fs.shared_with = $1
             )
     `,
     params: [user.id],
@@ -38,12 +51,12 @@ function whereVisibleToUser(user, alias = 'designs') {
 
 async function canAccess(designId, user) {
   const { rows } = await pool.query(
-    'SELECT owner_id, team_id FROM designs WHERE id = $1',
+    'SELECT owner_id, team_id, folder FROM designs WHERE id = $1',
     [designId]
   );
   if (!rows.length) return { status: 404 };
   if (user.role === 'admin') return { status: 200 };
-  const { owner_id, team_id } = rows[0];
+  const { owner_id, team_id, folder } = rows[0];
   if (owner_id === user.id) return { status: 200 };
   if (team_id != null) {
     const { rows: m } = await pool.query(
@@ -51,6 +64,18 @@ async function canAccess(designId, user) {
       [team_id, user.id]
     );
     if (m.length) return { status: 200 };
+  }
+  const { rows: ds } = await pool.query(
+    'SELECT 1 FROM design_shares WHERE design_id = $1 AND user_id = $2',
+    [designId, user.id]
+  );
+  if (ds.length) return { status: 200 };
+  if (folder != null) {
+    const { rows: fs } = await pool.query(
+      'SELECT 1 FROM folder_shares WHERE owner_id = $1 AND folder = $2 AND shared_with = $3',
+      [owner_id, folder, user.id]
+    );
+    if (fs.length) return { status: 200 };
   }
   return { status: 403 };
 }
@@ -203,6 +228,136 @@ designsRouter.delete('/:id', rejectViewerWrites, async (req, res, next) => {
     const chk = await canAccess(req.params.id, req.auth.user);
     if (chk.status !== 200) return res.status(chk.status).json({ error: 'not found' });
     await pool.query('DELETE FROM designs WHERE id = $1', [req.params.id]);
+    res.status(204).end();
+  } catch (err) { next(err); }
+});
+
+// --- Ad-hoc shares (design + folder) ---
+// Design shares: only the owner (or an admin) can manage them.
+// Folder shares: always keyed to the CALLER's own folders.
+
+async function requireOwner(req, res) {
+  const { rows } = await pool.query(
+    'SELECT owner_id FROM designs WHERE id = $1',
+    [req.params.id]
+  );
+  if (!rows.length) { res.status(404).json({ error: 'not found' }); return null; }
+  const { owner_id } = rows[0];
+  if (req.auth.user.role !== 'admin' && owner_id !== req.auth.user.id) {
+    res.status(403).json({ error: 'only the owner can manage shares' });
+    return null;
+  }
+  return { ownerId: owner_id };
+}
+
+designsRouter.get('/:id/shares', async (req, res, next) => {
+  try {
+    const owner = await requireOwner(req, res);
+    if (!owner) return;
+    const { rows } = await pool.query(
+      `SELECT u.id, u.email, u.display_name AS "displayName"
+         FROM design_shares ds
+         JOIN users u ON u.id = ds.user_id
+        WHERE ds.design_id = $1
+        ORDER BY u.email`,
+      [req.params.id]
+    );
+    res.json(rows);
+  } catch (err) { next(err); }
+});
+
+designsRouter.post('/:id/shares', rejectViewerWrites, async (req, res, next) => {
+  try {
+    const owner = await requireOwner(req, res);
+    if (!owner) return;
+    const { email } = req.body ?? {};
+    if (!email) return res.status(400).json({ error: 'email required' });
+    const { rows: users } = await pool.query(
+      'SELECT id FROM users WHERE email = $1',
+      [String(email).toLowerCase()]
+    );
+    if (!users.length) return res.status(404).json({ error: 'no user with that email' });
+    if (users[0].id === owner.ownerId) {
+      return res.status(400).json({ error: 'already the owner' });
+    }
+    try {
+      await pool.query(
+        'INSERT INTO design_shares (design_id, user_id) VALUES ($1, $2)',
+        [req.params.id, users[0].id]
+      );
+    } catch (err) {
+      if (err.code === '23505') return res.json({ ok: true, alreadyShared: true });
+      throw err;
+    }
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+designsRouter.delete('/:id/shares/:userId', rejectViewerWrites, async (req, res, next) => {
+  try {
+    const owner = await requireOwner(req, res);
+    if (!owner) return;
+    await pool.query(
+      'DELETE FROM design_shares WHERE design_id = $1 AND user_id = $2',
+      [req.params.id, req.params.userId]
+    );
+    res.status(204).end();
+  } catch (err) { next(err); }
+});
+
+// Folder-level shares. All endpoints are scoped to the caller's
+// owned folders — you can only share a folder you own.
+designsRouter.get('/folders/:name/shares', async (req, res, next) => {
+  try {
+    const folder = normalizeFolder(req.params.name);
+    if (folder === null) return res.status(400).json({ error: 'folder name required' });
+    const { rows } = await pool.query(
+      `SELECT u.id, u.email, u.display_name AS "displayName"
+         FROM folder_shares fs
+         JOIN users u ON u.id = fs.shared_with
+        WHERE fs.owner_id = $1 AND fs.folder = $2
+        ORDER BY u.email`,
+      [req.auth.user.id, folder]
+    );
+    res.json(rows);
+  } catch (err) { next(err); }
+});
+
+designsRouter.post('/folders/:name/shares', rejectViewerWrites, async (req, res, next) => {
+  try {
+    const folder = normalizeFolder(req.params.name);
+    if (folder === null) return res.status(400).json({ error: 'folder name required' });
+    const { email } = req.body ?? {};
+    if (!email) return res.status(400).json({ error: 'email required' });
+    const { rows: users } = await pool.query(
+      'SELECT id FROM users WHERE email = $1',
+      [String(email).toLowerCase()]
+    );
+    if (!users.length) return res.status(404).json({ error: 'no user with that email' });
+    if (users[0].id === req.auth.user.id) {
+      return res.status(400).json({ error: 'already the owner' });
+    }
+    try {
+      await pool.query(
+        'INSERT INTO folder_shares (owner_id, folder, shared_with) VALUES ($1, $2, $3)',
+        [req.auth.user.id, folder, users[0].id]
+      );
+    } catch (err) {
+      if (err.code === '23505') return res.json({ ok: true, alreadyShared: true });
+      throw err;
+    }
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+designsRouter.delete('/folders/:name/shares/:userId', rejectViewerWrites, async (req, res, next) => {
+  try {
+    const folder = normalizeFolder(req.params.name);
+    if (folder === null) return res.status(400).json({ error: 'folder name required' });
+    await pool.query(
+      'DELETE FROM folder_shares WHERE owner_id = $1 AND folder = $2 AND shared_with = $3',
+      [req.auth.user.id, folder, req.params.userId]
+    );
     res.status(204).end();
   } catch (err) { next(err); }
 });
