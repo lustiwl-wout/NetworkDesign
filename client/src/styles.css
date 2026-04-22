@@ -835,13 +835,18 @@ html, body, #root {
 }
 .design-card footer {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
   margin-top: auto;
-  gap: 8px;
+  gap: 10px;
 }
 .design-card .meta { font-size: 11px; color: var(--muted); }
-.design-card .actions { display: flex; gap: 6px; }
+.design-card .actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
 /* Open / Duplicate / Delete on a card share one visual size so the
    action row reads as a set, not a ragged mix of pills. */
 .design-card .actions .btn {
