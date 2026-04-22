@@ -842,6 +842,18 @@ html, body, #root {
 }
 .design-card .meta { font-size: 11px; color: var(--muted); }
 .design-card .actions { display: flex; gap: 6px; }
+/* Open / Duplicate / Delete on a card share one visual size so the
+   action row reads as a set, not a ragged mix of pills. */
+.design-card .actions .btn {
+  min-width: 82px;
+  height: 30px;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
 
 .empty-state {
   text-align: center;
