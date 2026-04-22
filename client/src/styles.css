@@ -351,7 +351,7 @@ html, body, #root {
 
 .btn.secondary.active {
   background: var(--accent);
-  color: #081824;
+  color: var(--on-accent);
   border-color: var(--accent);
 }
 
@@ -1134,7 +1134,7 @@ html, body, #root {
 }
 .auth-card .tabs .tab.active {
   background: var(--accent);
-  color: #081824;
+  color: var(--on-accent);
 }
 .mfa-input {
   font-size: 22px !important;
