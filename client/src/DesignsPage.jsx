@@ -189,14 +189,15 @@ export default function DesignsPage({ me }) {
             <section key={g.key} className="designs-group">
               <h2 className="designs-group-title">
                 {folderLabel}
-                {isTeam && (
+                {isTeam ? (
                   <span className="designs-group-owner team">
                     {g.teamName} · team
                   </span>
-                )}
-                {!isMine && !isTeam && (
+                ) : (
                   <span className="designs-group-owner">
-                    {g.ownerName || g.ownerEmail || 'Unknown'}
+                    {isMine
+                      ? (me?.displayName || me?.email || 'you')
+                      : (g.ownerName || g.ownerEmail || 'Unknown')}
                   </span>
                 )}
                 <span className="designs-group-count">{g.designs.length}</span>
@@ -226,11 +227,11 @@ export default function DesignsPage({ me }) {
                     <header>
                       <h3>{d.name}</h3>
                       {d.description && <p className="sub">{d.description}</p>}
-                      {d.owner_id !== me?.id && (
-                        <p className="owner-line">
-                          by {d.owner_name || d.owner_email || 'unknown'}
-                        </p>
-                      )}
+                      <p className="owner-line">
+                        by {d.owner_id === me?.id
+                          ? 'you'
+                          : (d.owner_name || d.owner_email || 'unknown')}
+                      </p>
                     </header>
                     <footer>
                       <span className="meta">
