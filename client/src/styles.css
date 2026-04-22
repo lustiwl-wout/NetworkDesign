@@ -277,8 +277,12 @@ html, body, #root {
 
 /* Management ↔ Engineering view switch in the topbar */
 .theme-btn {
-  min-width: 34px;
-  padding: 6px 10px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-size: 15px;
   line-height: 1;
 }
