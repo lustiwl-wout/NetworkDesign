@@ -35,17 +35,18 @@ html.theme-light {
   --grid: #d1d9e6;
 }
 
-/* Professional — "network documentation" register. Think Visio /
-   Lucidchart / a diagram pasted into a presales deck: pure white
-   canvas, thin flat shapes, no gradients, no shadows, simple dark
-   borders. Overrides the glossy per-theme styling the other themes
-   share (those use inline-colored gradients and drop shadows). */
+/* Professional — consulting-deck register. Off-white paper
+   (not clinical pure white), flat white devices with a faint
+   single-shadow for hint-of-depth, semantic device colours kept
+   but slightly desaturated so nothing shouts. One confident deep-
+   navy accent carries the UI chrome. Typography does the work
+   instead of colour. */
 html.theme-professional {
-  --bg: #ffffff;
+  --bg: #fafafa;
   --panel: #ffffff;
-  --panel-2: #f7f8fa;
-  --border: #cbd5e1;
-  --text: #111827;
+  --panel-2: #f5f6f8;
+  --border: #d1d5db;
+  --text: #1f2937;
   --muted: #6b7280;
   --accent: #1e3a8a;
   --accent-2: #172554;
@@ -56,43 +57,59 @@ html.theme-professional {
 
   --node-bg: #ffffff;
   --floating-bg: rgba(255, 255, 255, 0.98);
-  --grid: #edf0f4;
-  /* Documentation look: icon details & annotation text read dark on
-     white, not the near-white used in Dark/Light. */
+  --grid: #e5e7eb;
   --icon-line: #1f2937;
   --annotation-body: #1f2937;
 }
 
+/* --- Devices ------------------------------------------------------ */
 html.theme-professional .net-node {
   background: #ffffff !important;
-  border-width: 1.5px !important;
-  border-color: #334155 !important;
-  border-radius: 4px !important;
-  box-shadow: none !important;
+  border-width: 1.25px !important;
+  border-color: #94a3b8 !important;
+  border-radius: 6px !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06) !important;
   transition: none !important;
 }
 html.theme-professional .net-node:hover { transform: none !important; }
 html.theme-professional .net-node.selected {
-  border-color: #0f172a !important;
-  box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.25) !important;
+  border-color: #1e3a8a !important;
+  box-shadow:
+    0 0 0 2px rgba(30, 58, 138, 0.18),
+    0 1px 2px rgba(15, 23, 42, 0.06) !important;
 }
 html.theme-professional .net-node .icon-wrap { filter: none !important; }
-html.theme-professional .net-node .label { color: #0f172a; }
+/* Tone down the semantic device colours for a print-friendly feel. */
+html.theme-professional .net-node .icon-wrap > svg {
+  filter: saturate(0.8);
+}
+html.theme-professional .net-node .label {
+  color: #1f2937;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+html.theme-professional .net-node .sub { color: #6b7280; font-size: 11px; }
 
+/* --- Zones -------------------------------------------------------- */
 html.theme-professional .zone-node {
   background: transparent !important;
   border-width: 1.5px !important;
-  border-radius: 4px !important;
+  border-radius: 6px !important;
   box-shadow: none !important;
 }
 html.theme-professional .zone-node.selected { box-shadow: none !important; }
 html.theme-professional .zone-header {
   background: #ffffff !important;
-  border-radius: 2px;
+  padding: 3px 10px !important;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  border-radius: 4px;
 }
 
-/* Make the grid barely visible — clean-paper feel. */
-html.theme-professional .react-flow__background { opacity: 0.6; }
+/* --- Grid --------------------------------------------------------- */
+html.theme-professional .react-flow__background { opacity: 0.4; }
 
 * { box-sizing: border-box; }
 
