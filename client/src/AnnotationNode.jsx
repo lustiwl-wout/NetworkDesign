@@ -4,10 +4,14 @@ const DEFAULT_COLOR = '#facc15';
 
 export default function AnnotationNode({ data, selected }) {
   const color = data?.color ?? DEFAULT_COLOR;
-  const text = data?.text ?? 'Double-click to edit';
+  const text = data?.text ?? '';
   const variant = data?.variant ?? 'callout'; // 'callout' | 'note'
 
   const borderStyle = variant === 'note' ? 'solid' : 'dashed';
+  // Empty body → render a muted placeholder that disappears the
+  // moment the user types real content. Stored text is untouched
+  // so the user isn't editing a "stub" string.
+  const showPlaceholder = !text.trim();
 
   return (
     <div
@@ -34,7 +38,9 @@ export default function AnnotationNode({ data, selected }) {
       {data?.title && (
         <div className="annotation-title">{data.title}</div>
       )}
-      <div className="annotation-body">{text}</div>
+      {showPlaceholder
+        ? <div className="annotation-body annotation-body--placeholder">Click to edit this note</div>
+        : <div className="annotation-body">{text}</div>}
     </div>
   );
 }

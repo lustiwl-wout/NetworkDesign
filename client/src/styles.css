@@ -1391,6 +1391,10 @@ html, body, #root {
   margin-bottom: 4px;
 }
 .annotation-body { white-space: pre-wrap; }
+.annotation-body--placeholder {
+  color: var(--muted);
+  font-style: italic;
+}
 
 /* Presentation mode — hide palette, topbar, inspector; canvas full screen.
    Controls (zoom / fit / lock) stay visible so the presenter can

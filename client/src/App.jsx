@@ -415,7 +415,7 @@ function Editor({ me }) {
           position,
           style: { width: 220, height: 80 },
           data: {
-            text: 'Click to edit this note',
+            text: '',
             title: '',
             color: value === 'warning' ? '#ef4444'
                  : value === 'success' ? '#22c55e'
