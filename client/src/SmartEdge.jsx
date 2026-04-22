@@ -106,23 +106,21 @@ export default function SmartEdge(props) {
     window.__wpEdgeRender = (window.__wpEdgeRender ?? 0) + 1;
     window.__wpEdgeWps = waypoints.length;
   }
+  // Route each leg independently. Shortcutting is applied per-leg so
+  // waypoints stay as hard bends: if we merged all legs first, the
+  // shortcut pass would happily straight-line from ss to ts and erase
+  // every waypoint in between.
   const stops = [ss, ...waypoints, ts];
-  const legs = [];
+  const mergedLegs = [];
+  let routeFailed = false;
   for (let i = 0; i < stops.length - 1; i++) {
     const leg = astar(stops[i], stops[i + 1], obstacles);
-    if (!leg) { legs.length = 0; break; }
-    // Avoid duplicating the shared endpoint between legs.
-    legs.push(i === 0 ? leg : leg.slice(1));
+    if (!leg || leg.length === 0) { routeFailed = true; break; }
+    const shortened = shortcut(leg, obstacles);
+    mergedLegs.push(i === 0 ? shortened : shortened.slice(1));
   }
-  const midRaw = legs.flat();
-
-  if (!midRaw || midRaw.length === 0) return renderWarning(id, sa, ta, style, markerEnd);
-
-  // A* on a 10 px grid produces lots of tiny "staircase" steps when the
-  // start and end aren't axis-aligned. Shortcut greedily replaces runs
-  // of small corners with the farthest-reachable destination via a
-  // single L-shape, eliminating visual zigzag.
-  const mid = shortcut(midRaw, obstacles);
+  if (routeFailed) return renderWarning(id, sa, ta, style, markerEnd);
+  const mid = mergedLegs.flat();
 
   // Include the stub tips explicitly so the first/last segment is
   // guaranteed axis-aligned with the anchor (the stub is perpendicular
