@@ -119,6 +119,20 @@ html.theme-professional .zone-header {
 /* --- Grid --------------------------------------------------------- */
 html.theme-professional .react-flow__background { opacity: 0.4; }
 
+/* In Professional the per-variant colour on an annotation's title
+   (yellow / blue / red / green) reads as unreadable against the
+   8%-tinted, near-white background. Force the title dark instead;
+   the border + tint still carry the variant signal. Bump the body
+   tint alpha so backgrounds also have visible contrast. */
+html.theme-professional .annotation-node .annotation-title {
+  color: var(--text) !important;
+}
+html.theme-professional .annotation-node {
+  /* Override the 0x14 (~8%) alpha fill the component applies
+     inline, since on white it disappears. */
+  background: #f6f7fa !important;
+}
+
 * { box-sizing: border-box; }
 
 html, body, #root {

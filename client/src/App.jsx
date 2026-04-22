@@ -419,6 +419,7 @@ function Editor({ me }) {
             title: '',
             color: value === 'warning' ? '#ef4444'
                  : value === 'success' ? '#22c55e'
+                 : value === 'note'    ? '#3b82f6'   // informational notes read as blue, not warning-yellow
                  : '#facc15',
             variant: value === 'note' ? 'note' : 'callout',
           },
