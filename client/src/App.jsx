@@ -29,6 +29,7 @@ import {
   setEdgeKinds as setEdgeKindsModule,
 } from './edgePresets.js';
 import { exportCanvasPng } from './exportImage.js';
+import { AlignmentGuides, computeGuides } from './AlignmentGuides.jsx';
 
 const nodeTypes = { device: NetworkNode, zone: ZoneNode, annotation: AnnotationNode };
 const edgeTypes = { smart: SmartEdge };
@@ -327,9 +328,18 @@ function Editor({ me }) {
     event.dataTransfer.effectAllowed = 'move';
   };
 
+  // Alignment / equal-spacing guides shown while a node is being
+  // dragged. Computed live in onNodeDrag; cleared in onNodeDragStop.
+  const [guides, setGuides] = useState([]);
+  const onNodeDrag = useCallback((_event, node) => {
+    const dragPos = node.positionAbsolute ?? node.position;
+    setGuides(computeGuides(node.id, nodesRef.current, { [node.id]: dragPos }));
+  }, []);
+
   // Re-parent devices when dragged across zones. Zones don't clamp their
   // children (extent: 'parent') so this runs on every drag.
   const onNodeDragStop = useCallback((_event, node) => {
+    setGuides([]);
     if (node.type !== 'device') return;
     const absPos = node.positionAbsolute
       ?? (node.parentNode
@@ -761,6 +771,7 @@ function Editor({ me }) {
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}
           onNodeDragStart={takeSnapshot}
+          onNodeDrag={onNodeDrag}
           onNodeClick={(_, node) => { setSelectedNode(node); setSelectedEdge(null); }}
           onEdgeClick={(_, edge) => { setSelectedEdge(edge); setSelectedNode(null); }}
           onNodeDragStop={onNodeDragStop}
@@ -781,6 +792,7 @@ function Editor({ me }) {
           <Background gap={16} size={1} color="var(--grid)" />
           <Controls />
           <MiniMap pannable zoomable maskColor="rgba(15,23,42,0.6)" />
+          <AlignmentGuides guides={guides} />
         </ReactFlow>
         </EditorCtx.Provider>
         {!canSave && (
