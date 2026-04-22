@@ -801,6 +801,29 @@ html, body, #root {
   font-size: 13px;
   min-width: 220px;
 }
+.designs-group { margin-bottom: 28px; }
+.designs-group-title {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin: 0 0 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.designs-group-count {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 1px 8px;
+}
 .designs-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -850,9 +873,9 @@ html, body, #root {
 /* Open / Duplicate / Delete on a card share one visual size so the
    action row reads as a set, not a ragged mix of pills. */
 .design-card .actions .btn {
-  min-width: 82px;
+  min-width: 72px;
   height: 30px;
-  padding: 0 12px;
+  padding: 0 10px;
   font-size: 12px;
   font-weight: 500;
   display: inline-flex;

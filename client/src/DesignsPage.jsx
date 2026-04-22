@@ -1,5 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { api } from './api.js';
+
+const UNFILED = '__unfiled__';
 
 export default function DesignsPage({ me }) {
   const [items, setItems] = useState([]);
@@ -23,9 +25,6 @@ export default function DesignsPage({ me }) {
     catch (e) { setErr(e.message); }
   };
 
-  // Duplicate fetches the full design (graph + metadata) then creates
-  // a new one with a "Copy of …" name. The new design shows up in
-  // the list immediately via reload.
   const duplicate = async (id, name) => {
     const suggested = `Copy of ${name}`.slice(0, 120);
     const newName = prompt('Name for the duplicate?', suggested);
@@ -35,15 +34,52 @@ export default function DesignsPage({ me }) {
       await api.create({
         name: newName.trim(),
         description: full.description ?? '',
+        folder: full.folder ?? null,
         graph: full.graph ?? { nodes: [], edges: [] },
       });
       await load();
     } catch (e) { setErr(`Duplicate failed: ${e.message}`); }
   };
 
-  const filtered = items.filter((d) =>
-    !query || d.name.toLowerCase().includes(query.toLowerCase())
-  );
+  // Folder name autocompletes off the existing set, so the user can
+  // tab between known folders without retyping. Empty string clears
+  // the folder.
+  const move = async (id, currentFolder) => {
+    const existing = [...new Set(items.map((d) => d.folder).filter(Boolean))].sort();
+    const hint = existing.length
+      ? `Existing folders: ${existing.join(', ')}\n(leave blank to move to Unfiled)`
+      : '(leave blank to move to Unfiled)';
+    const next = prompt(`Move to folder?\n${hint}`, currentFolder ?? '');
+    if (next === null) return; // cancelled
+    try {
+      await api.update(id, { folder: next.trim() || null });
+      await load();
+    } catch (e) { setErr(`Move failed: ${e.message}`); }
+  };
+
+  // Filter + group. Query matches name and folder label; groups keep
+  // their order stable by sorted folder name, with Unfiled at the end.
+  const groups = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const filtered = items.filter((d) => {
+      if (!q) return true;
+      return (d.name ?? '').toLowerCase().includes(q)
+        || (d.folder ?? '').toLowerCase().includes(q);
+    });
+    const map = new Map();
+    for (const d of filtered) {
+      const key = d.folder ?? UNFILED;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(d);
+    }
+    const named = [...map.entries()]
+      .filter(([k]) => k !== UNFILED)
+      .sort(([a], [b]) => a.localeCompare(b));
+    const unfiled = map.get(UNFILED) ?? [];
+    const out = named.map(([name, designs]) => ({ name, designs }));
+    if (unfiled.length) out.push({ name: UNFILED, designs: unfiled });
+    return out;
+  }, [items, query]);
 
   return (
     <div className="designs-page">
@@ -75,43 +111,55 @@ export default function DesignsPage({ me }) {
             </div>
           </div>
         )}
-        {me && !loading && filtered.length === 0 && (
+        {me && !loading && groups.length === 0 && (
           <div className="empty-state">
             <h2>No saved designs yet</h2>
             <p className="hint">
-              Create one from a template or start from a blank canvas on the editor.
+              Name a design in the editor and it will save automatically.
             </p>
             <a className="btn" href="/">Go to editor</a>
           </div>
         )}
-        <div className="designs-grid">
-          {filtered.map((d) => (
-            <article key={d.id} className="design-card">
-              <header>
-                <h3>{d.name}</h3>
-                {d.description && <p className="sub">{d.description}</p>}
-              </header>
-              <footer>
-                <span className="meta">
-                  Updated {new Date(d.updated_at).toLocaleString(undefined, {
-                    dateStyle: 'medium', timeStyle: 'short',
-                  })}
-                </span>
-                <div className="actions">
-                  <a className="btn" href={`/?design=${d.id}`}>Open</a>
-                  <button
-                    className="btn secondary small"
-                    onClick={() => duplicate(d.id, d.name)}
-                  >Duplicate</button>
-                  <button
-                    className="btn danger small"
-                    onClick={() => remove(d.id, d.name)}
-                  >Delete</button>
-                </div>
-              </footer>
-            </article>
-          ))}
-        </div>
+        {groups.map((g) => (
+          <section key={g.name} className="designs-group">
+            <h2 className="designs-group-title">
+              {g.name === UNFILED ? 'Unfiled' : g.name}
+              <span className="designs-group-count">{g.designs.length}</span>
+            </h2>
+            <div className="designs-grid">
+              {g.designs.map((d) => (
+                <article key={d.id} className="design-card">
+                  <header>
+                    <h3>{d.name}</h3>
+                    {d.description && <p className="sub">{d.description}</p>}
+                  </header>
+                  <footer>
+                    <span className="meta">
+                      Updated {new Date(d.updated_at).toLocaleString(undefined, {
+                        dateStyle: 'medium', timeStyle: 'short',
+                      })}
+                    </span>
+                    <div className="actions">
+                      <a className="btn" href={`/?design=${d.id}`}>Open</a>
+                      <button
+                        className="btn secondary"
+                        onClick={() => move(d.id, d.folder)}
+                      >Move</button>
+                      <button
+                        className="btn secondary"
+                        onClick={() => duplicate(d.id, d.name)}
+                      >Duplicate</button>
+                      <button
+                        className="btn danger"
+                        onClick={() => remove(d.id, d.name)}
+                      >Delete</button>
+                    </div>
+                  </footer>
+                </article>
+              ))}
+            </div>
+          </section>
+        ))}
       </main>
     </div>
   );

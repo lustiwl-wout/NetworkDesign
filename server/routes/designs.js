@@ -54,11 +54,21 @@ async function snapshotVersion(designId, user) {
   );
 }
 
+// Folder is stored as plain text on the design; an empty/null folder
+// means "unfiled". Callers can pass an empty string or null to move a
+// design out of a folder. We trim whitespace so "  Prod " and "Prod"
+// don't render as separate folders.
+function normalizeFolder(v) {
+  if (v == null) return null;
+  const s = String(v).trim();
+  return s.length ? s.slice(0, 120) : null;
+}
+
 designsRouter.get('/', async (req, res, next) => {
   try {
     const { clause, params } = whereVisibleToUser(req.auth.user);
     const { rows } = await pool.query(
-      `SELECT id, name, description, owner_id, narrative, updated_at
+      `SELECT id, name, description, folder, owner_id, narrative, updated_at
          FROM designs ${clause}
         ORDER BY updated_at DESC`,
       params
@@ -72,7 +82,7 @@ designsRouter.get('/:id', async (req, res, next) => {
     const chk = await canAccess(req.params.id, req.auth.user);
     if (chk.status !== 200) return res.status(chk.status).json({ error: 'not found' });
     const { rows } = await pool.query(
-      `SELECT id, name, description, graph, narrative, owner_id, created_at, updated_at
+      `SELECT id, name, description, folder, graph, narrative, owner_id, created_at, updated_at
          FROM designs WHERE id = $1`,
       [req.params.id]
     );
@@ -82,13 +92,13 @@ designsRouter.get('/:id', async (req, res, next) => {
 
 designsRouter.post('/', rejectViewerWrites, async (req, res, next) => {
   try {
-    const { name, description = '', graph = EMPTY_GRAPH, narrative = {} } = req.body ?? {};
+    const { name, description = '', folder, graph = EMPTY_GRAPH, narrative = {} } = req.body ?? {};
     if (!name || typeof name !== 'string') return res.status(400).json({ error: 'name is required' });
     const { rows } = await pool.query(
-      `INSERT INTO designs (name, description, graph, narrative, owner_id)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING id, name, description, graph, narrative, owner_id, created_at, updated_at`,
-      [name, description, graph, narrative, req.auth.user.id]
+      `INSERT INTO designs (name, description, folder, graph, narrative, owner_id)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id, name, description, folder, graph, narrative, owner_id, created_at, updated_at`,
+      [name, description, normalizeFolder(folder), graph, narrative, req.auth.user.id]
     );
     await snapshotVersion(rows[0].id, req.auth.user);
     res.status(201).json(rows[0]);
@@ -100,16 +110,30 @@ designsRouter.put('/:id', rejectViewerWrites, async (req, res, next) => {
     const chk = await canAccess(req.params.id, req.auth.user);
     if (chk.status !== 200) return res.status(chk.status).json({ error: 'not found' });
 
-    const { name, description, graph, narrative } = req.body ?? {};
+    const { name, description, folder, graph, narrative } = req.body ?? {};
+    // Folder uses a tri-state: `undefined` means "don't touch", `null`
+    // or empty string means "unfile", any non-empty string sets the
+    // folder. `COALESCE` won't work here because null is a valid
+    // assignment, so we pass a flag column.
+    const folderProvided = Object.prototype.hasOwnProperty.call(req.body ?? {}, 'folder');
     const { rows } = await pool.query(
       `UPDATE designs
          SET name        = COALESCE($2, name),
              description = COALESCE($3, description),
+             folder      = CASE WHEN $6::boolean THEN $7 ELSE folder END,
              graph       = COALESCE($4, graph),
              narrative   = COALESCE($5, narrative)
        WHERE id = $1
-       RETURNING id, name, description, graph, narrative, owner_id, created_at, updated_at`,
-      [req.params.id, name ?? null, description ?? null, graph ?? null, narrative ?? null]
+       RETURNING id, name, description, folder, graph, narrative, owner_id, created_at, updated_at`,
+      [
+        req.params.id,
+        name ?? null,
+        description ?? null,
+        graph ?? null,
+        narrative ?? null,
+        folderProvided,
+        folderProvided ? normalizeFolder(folder) : null,
+      ]
     );
     await snapshotVersion(rows[0].id, req.auth.user);
     res.json(rows[0]);

@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS designs (
   id          SERIAL PRIMARY KEY,
   name        TEXT NOT NULL,
   description TEXT DEFAULT '',
+  folder      TEXT,
   graph       JSONB NOT NULL DEFAULT '{"nodes":[],"edges":[]}'::jsonb,
   narrative   JSONB NOT NULL DEFAULT '{}'::jsonb,
   owner_id    INTEGER REFERENCES users(id) ON DELETE SET NULL,
@@ -40,6 +41,7 @@ CREATE TABLE IF NOT EXISTS designs (
 -- Columns added on older installs
 ALTER TABLE designs ADD COLUMN IF NOT EXISTS owner_id  INTEGER REFERENCES users(id) ON DELETE SET NULL;
 ALTER TABLE designs ADD COLUMN IF NOT EXISTS narrative JSONB NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE designs ADD COLUMN IF NOT EXISTS folder    TEXT;
 
 CREATE TABLE IF NOT EXISTS design_versions (
   id          SERIAL PRIMARY KEY,
