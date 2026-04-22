@@ -39,19 +39,70 @@ const nextId = () => `n_${Date.now().toString(36)}_${tmpId++}`;
 
 // Find the zone node whose rectangle contains the given flow position,
 // so dropped devices can auto-parent to it.
-function findContainingZone(nodes, pos) {
-  for (const n of nodes) {
-    if (n.type !== 'zone') continue;
-    const w = n.style?.width  ?? n.width  ?? 0;
-    const h = n.style?.height ?? n.height ?? 0;
-    if (
-      pos.x >= n.position.x && pos.x <= n.position.x + w &&
-      pos.y >= n.position.y && pos.y <= n.position.y + h
-    ) {
-      return n;
+// Walk a node's parentNode chain to compute its absolute position
+// in flow coords. Needed because React Flow stores child-of-zone
+// positions RELATIVE to the parent — a zone nested in another zone
+// has a .position that's relative, not absolute.
+function absolutePos(node, allNodes) {
+  let x = node.position?.x ?? 0;
+  let y = node.position?.y ?? 0;
+  let pid = node.parentNode;
+  const seen = new Set();
+  while (pid && !seen.has(pid)) {
+    seen.add(pid);
+    const p = allNodes.find((n) => n.id === pid);
+    if (!p) break;
+    x += p.position?.x ?? 0;
+    y += p.position?.y ?? 0;
+    pid = p.parentNode;
+  }
+  return { x, y };
+}
+
+// Every descendant of a node (transitive via parentNode). Used to
+// exclude self + children when a zone is being dropped — a zone
+// can't be parented into one of its own descendants.
+function descendantIds(allNodes, rootId) {
+  const ids = new Set();
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const n of allNodes) {
+      if (ids.has(n.id)) continue;
+      if (n.parentNode === rootId || (n.parentNode && ids.has(n.parentNode))) {
+        ids.add(n.id);
+        grew = true;
+      }
     }
   }
-  return null;
+  return ids;
+}
+
+// Find the deepest zone that contains `pos` (absolute flow coord).
+// Preferring the smallest containing zone means a zone nested inside
+// another zone wins over its parent, which is what users expect when
+// dropping into a zone-within-a-zone.
+function findContainingZone(nodes, pos, excludeId = null) {
+  const skip = new Set();
+  if (excludeId) {
+    skip.add(excludeId);
+    for (const id of descendantIds(nodes, excludeId)) skip.add(id);
+  }
+  let best = null;
+  let bestArea = Infinity;
+  for (const n of nodes) {
+    if (n.type !== 'zone' || skip.has(n.id)) continue;
+    const w = n.width  ?? n.style?.width  ?? 0;
+    const h = n.height ?? n.style?.height ?? 0;
+    if (!w || !h) continue;
+    const abs = absolutePos(n, nodes);
+    if (pos.x >= abs.x && pos.x <= abs.x + w &&
+        pos.y >= abs.y && pos.y <= abs.y + h) {
+      const area = w * h;
+      if (area < bestArea) { best = n; bestArea = area; }
+    }
+  }
+  return best;
 }
 
 // Lightweight deep-ish equality for the autosave dirty-check. The
@@ -307,8 +358,9 @@ function Editor({ me }) {
         const d = deviceByKey[value];
         if (!d) { pendingDropRef.current.delete(id); return; }
         const parent = findContainingZone(nodes, { x: cursor.x, y: cursor.y });
-        const relPos = parent
-          ? { x: position.x - parent.position.x, y: position.y - parent.position.y }
+        const parentAbs = parent ? absolutePos(parent, nodes) : null;
+        const relPos = parentAbs
+          ? { x: position.x - parentAbs.x, y: position.y - parentAbs.y }
           : position;
 
         setNodes((nds) => nds.concat({
@@ -331,17 +383,27 @@ function Editor({ me }) {
       } else if (kind === 'zone') {
         const z = zoneByKey[value];
         if (!z) { pendingDropRef.current.delete(id); return; }
-        setNodes((nds) => [
-          {
-            id,
-            type: 'zone',
-            position,
-            style: { width: z.defaultWidth, height: z.defaultHeight },
-            zIndex: -1,
-            data: { typeKey: z.key, label: z.label, color: z.color, sublabel: '' },
-          },
-          ...nds,
-        ]);
+        // Zones can now nest — if dropped inside another zone,
+        // become its child and store position relative to it.
+        const parent = findContainingZone(nodes, { x: cursor.x, y: cursor.y });
+        const parentAbs = parent ? absolutePos(parent, nodes) : null;
+        const relPos = parentAbs
+          ? { x: position.x - parentAbs.x, y: position.y - parentAbs.y }
+          : position;
+        const newZone = {
+          id,
+          type: 'zone',
+          position: relPos,
+          style: { width: z.defaultWidth, height: z.defaultHeight },
+          zIndex: -1,
+          ...(parent ? { parentNode: parent.id } : {}),
+          data: { typeKey: z.key, label: z.label, color: z.color, sublabel: '' },
+        };
+        // If nested we need the new zone AFTER the parent in the
+        // array for React Flow to render it inside; if top-level,
+        // keep the "push to the front so devices render on top"
+        // behaviour.
+        setNodes((nds) => parent ? nds.concat(newZone) : [newZone, ...nds]);
       } else if (kind === 'annotation') {
         setNodes((nds) => nds.concat({
           id,
@@ -387,25 +449,23 @@ function Editor({ me }) {
     setGuides(computeGuides(node.id, nodesRef.current, { [node.id]: abs ?? node.position }));
   }, []);
 
-  // Re-parent devices when dragged across zones. Zones don't clamp their
-  // children (extent: 'parent') so this runs on every drag.
+  // Re-parent devices AND zones when dragged across / out of zones.
+  // Annotations stay where they are; zones nest now (a zone dropped
+  // inside another zone becomes its child).
   const onNodeDragStop = useCallback((_event, node) => {
     setGuides([]);
-    if (node.type !== 'device') return;
-    const absPos = node.positionAbsolute
-      ?? (node.parentNode
-        ? (() => {
-            const p = nodes.find((n) => n.id === node.parentNode);
-            return p ? { x: node.position.x + p.position.x, y: node.position.y + p.position.y } : node.position;
-          })()
-        : node.position);
-    const newParent = findContainingZone(nodes, absPos);
+    if (node.type !== 'device' && node.type !== 'zone') return;
+    // Use React Flow's live positionAbsolute when present; fall back
+    // to walking the parent chain ourselves using the latest state.
+    const absPos = node.positionAbsolute ?? absolutePos(node, nodes);
+    const newParent = findContainingZone(nodes, absPos, node.id);
     const newParentId = newParent?.id ?? undefined;
     if (newParentId === (node.parentNode ?? undefined)) return;
+    const newParentAbs = newParent ? absolutePos(newParent, nodes) : null;
     setNodes((nds) => nds.map((n) => {
       if (n.id !== node.id) return n;
-      const relPos = newParent
-        ? { x: absPos.x - newParent.position.x, y: absPos.y - newParent.position.y }
+      const relPos = newParentAbs
+        ? { x: absPos.x - newParentAbs.x, y: absPos.y - newParentAbs.y }
         : absPos;
       const next = { ...n, position: relPos };
       if (newParentId) next.parentNode = newParentId;
