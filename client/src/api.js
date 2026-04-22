@@ -22,4 +22,9 @@ export const api = {
   create: (body)        => request('/designs', { method: 'POST', body: JSON.stringify(body) }),
   update: (id, body)    => request(`/designs/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   remove: (id)          => request(`/designs/${id}`, { method: 'DELETE' }),
+  // Bulk folder ops — rename every design currently in `from` to
+  // `to` (null unfiles them), or delete a folder entirely which
+  // just unfiles every design in it.
+  renameFolder: (from, to)  => request('/designs/folders/rename', { method: 'POST', body: JSON.stringify({ from, to }) }),
+  deleteFolder: (name)      => request(`/designs/folders/${encodeURIComponent(name)}`, { method: 'DELETE' }),
 };

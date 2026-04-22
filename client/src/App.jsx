@@ -714,6 +714,12 @@ function Editor({ me }) {
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="Design name"
+          onFocus={(e) => {
+            // First-time naming: the placeholder-ish "Untitled design"
+            // is a real value. Select all so typing replaces it in
+            // one stroke without the user deleting it manually.
+            if (name === 'Untitled design') e.target.select();
+          }}
         />
         <button
           type="button"

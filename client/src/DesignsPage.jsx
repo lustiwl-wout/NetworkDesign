@@ -27,6 +27,30 @@ export default function DesignsPage({ me }) {
     catch (e) { setErr(e.message); }
   };
 
+  const rename = async (id, currentName) => {
+    const next = prompt('Rename design', currentName ?? '');
+    if (next === null) return;
+    const trimmed = next.trim();
+    if (!trimmed || trimmed === currentName) return;
+    try { await api.update(id, { name: trimmed }); await load(); }
+    catch (e) { setErr(`Rename failed: ${e.message}`); }
+  };
+
+  const renameFolder = async (folder) => {
+    const next = prompt(`Rename folder "${folder}" to:`, folder);
+    if (next === null) return;
+    const trimmed = next.trim();
+    if (!trimmed || trimmed === folder) return;
+    try { await api.renameFolder(folder, trimmed); await load(); }
+    catch (e) { setErr(`Rename folder failed: ${e.message}`); }
+  };
+
+  const deleteFolder = async (folder, count) => {
+    if (!confirm(`Remove folder "${folder}"?\nThe ${count} design${count === 1 ? '' : 's'} in it will move to Unfiled.`)) return;
+    try { await api.deleteFolder(folder); await load(); }
+    catch (e) { setErr(`Remove folder failed: ${e.message}`); }
+  };
+
   const duplicate = async (id, name) => {
     const suggested = `Copy of ${name}`.slice(0, 120);
     const newName = prompt('Name for the duplicate?', suggested);
@@ -155,6 +179,20 @@ export default function DesignsPage({ me }) {
                   </span>
                 )}
                 <span className="designs-group-count">{g.designs.length}</span>
+                {isMine && g.folder !== UNFILED && (
+                  <span className="designs-group-actions">
+                    <button
+                      type="button"
+                      className="linklike"
+                      onClick={() => renameFolder(g.folder)}
+                    >Rename</button>
+                    <button
+                      type="button"
+                      className="linklike danger"
+                      onClick={() => deleteFolder(g.folder, g.designs.length)}
+                    >Remove folder</button>
+                  </span>
+                )}
               </h2>
               <div className="designs-grid">
                 {g.designs.map((d) => (
@@ -176,6 +214,10 @@ export default function DesignsPage({ me }) {
                       </span>
                       <div className="actions">
                         <a className="btn" href={`/?design=${d.id}`}>Open</a>
+                        <button
+                          className="btn secondary"
+                          onClick={() => rename(d.id, d.name)}
+                        >Rename</button>
                         <button
                           className="btn secondary"
                           onClick={() => setMoveTarget({ design: d, folder: d.folder ?? '' })}

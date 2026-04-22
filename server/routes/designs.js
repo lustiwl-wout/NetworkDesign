@@ -158,6 +158,41 @@ designsRouter.delete('/:id', rejectViewerWrites, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// --- Bulk folder ops (scoped to the caller) ---
+// Folders aren't a first-class entity; they're just a text column on
+// each design. Rename / delete operate by updating every row the
+// caller owns in the named folder.
+
+designsRouter.post('/folders/rename', rejectViewerWrites, async (req, res, next) => {
+  try {
+    const { from, to } = req.body ?? {};
+    if (from == null) return res.status(400).json({ error: 'from folder is required' });
+    const target = normalizeFolder(to);
+    const fromVal = normalizeFolder(from);
+    const whereClause = fromVal === null
+      ? 'folder IS NULL AND owner_id = $1'
+      : 'folder = $2 AND owner_id = $1';
+    const params = fromVal === null ? [req.auth.user.id] : [req.auth.user.id, fromVal];
+    const { rowCount } = await pool.query(
+      `UPDATE designs SET folder = $${params.length + 1} WHERE ${whereClause}`,
+      [...params, target]
+    );
+    res.json({ updated: rowCount });
+  } catch (err) { next(err); }
+});
+
+designsRouter.delete('/folders/:name', rejectViewerWrites, async (req, res, next) => {
+  try {
+    const fromVal = normalizeFolder(req.params.name);
+    if (fromVal === null) return res.status(400).json({ error: 'folder name is required' });
+    const { rowCount } = await pool.query(
+      'UPDATE designs SET folder = NULL WHERE folder = $1 AND owner_id = $2',
+      [fromVal, req.auth.user.id]
+    );
+    res.json({ unfiled: rowCount });
+  } catch (err) { next(err); }
+});
+
 // --- Versions ---
 
 designsRouter.get('/:id/versions', async (req, res, next) => {
