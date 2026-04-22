@@ -724,10 +724,10 @@ function Editor({ me }) {
           type="button"
           className="btn secondary theme-btn"
           onClick={() => setTheme(nextTheme(theme))}
-          title={`Theme: ${THEME_LABEL[theme]}. Click to switch to ${THEME_LABEL[nextTheme(theme)]}.`}
-          aria-label="Cycle theme"
+          title={`Theme: ${THEME_NAME[theme]}. Click to switch to ${THEME_NAME[nextTheme(theme)]}.`}
+          aria-label={`Theme: ${THEME_NAME[theme]}, click to cycle`}
         >
-          {THEME_LABEL[theme]}
+          {THEME_ICON[theme]}
         </button>
         <div className="view-switch" role="tablist" aria-label="View">
           <button
@@ -1306,7 +1306,8 @@ function SaveStatus({ state }) {
 }
 
 const THEMES = ['dark', 'light', 'professional'];
-const THEME_LABEL = { dark: '🌙 Dark', light: '☀︎ Light', professional: '💼 Professional' };
+const THEME_ICON = { dark: '🌙', light: '☀︎', professional: '💼' };
+const THEME_NAME = { dark: 'Dark', light: 'Light', professional: 'Professional' };
 function nextTheme(t) { return THEMES[(THEMES.indexOf(t) + 1) % THEMES.length] || 'dark'; }
 
 function useTheme() {
