@@ -21,8 +21,9 @@ function rejectViewerWrites(req, res, next) {
 const EMPTY_GRAPH = { nodes: [], edges: [] };
 const MAX_VERSIONS = 50;
 
-function whereVisibleToUser(user) {
-  return user.role === 'admin' ? { clause: '', params: [] } : { clause: 'WHERE owner_id = $1', params: [user.id] };
+function whereVisibleToUser(user, alias = 'designs') {
+  if (user.role === 'admin') return { clause: '', params: [] };
+  return { clause: `WHERE ${alias}.owner_id = $1`, params: [user.id] };
 }
 
 async function canAccess(designId, user) {
@@ -66,11 +67,19 @@ function normalizeFolder(v) {
 
 designsRouter.get('/', async (req, res, next) => {
   try {
-    const { clause, params } = whereVisibleToUser(req.auth.user);
+    const { clause, params } = whereVisibleToUser(req.auth.user, 'd');
+    // Join the owner so the Designs page can show who a design
+    // belongs to and can group by (owner, folder) — each user's
+    // "Clients" folder is its own space.
     const { rows } = await pool.query(
-      `SELECT id, name, description, folder, owner_id, narrative, updated_at
-         FROM designs ${clause}
-        ORDER BY updated_at DESC`,
+      `SELECT d.id, d.name, d.description, d.folder, d.owner_id,
+              d.narrative, d.updated_at,
+              u.email        AS owner_email,
+              u.display_name AS owner_name
+         FROM designs d
+         LEFT JOIN users u ON u.id = d.owner_id
+         ${clause}
+        ORDER BY d.updated_at DESC`,
       params
     );
     res.json(rows);

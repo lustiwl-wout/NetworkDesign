@@ -815,6 +815,17 @@ html, body, #root {
   align-items: center;
   gap: 10px;
 }
+.designs-group-owner {
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--muted);
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 8px;
+}
 .designs-group-count {
   font-size: 11px;
   font-weight: 600;
@@ -823,6 +834,88 @@ html, body, #root {
   border: 1px solid var(--border);
   border-radius: 999px;
   padding: 1px 8px;
+}
+.design-card .owner-line {
+  font-size: 11px;
+  color: var(--muted);
+  margin: 4px 0 0;
+  font-style: italic;
+}
+
+/* FolderCombobox — text input + anchored dropdown */
+.folder-combobox { position: relative; }
+.folder-combobox-input {
+  width: 100%;
+  height: 34px;
+  padding: 0 12px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+}
+.folder-combobox-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.folder-combobox-menu {
+  position: absolute;
+  z-index: 10;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 220px;
+  overflow-y: auto;
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+  background: var(--floating-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.16);
+}
+.folder-combobox-option {
+  padding: 6px 12px;
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+}
+.folder-combobox-option.active,
+.folder-combobox-option:hover { background: var(--panel-2); }
+.folder-combobox-option.unfiled { color: var(--muted); font-style: italic; }
+.folder-combobox-option.create { color: var(--accent); }
+
+/* Generic modal for Move + (upcoming) Share dialogs */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+.modal {
+  width: min(420px, 92vw);
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 12px 36px rgba(15, 23, 42, 0.35);
+  padding: 18px 20px;
+}
+.modal h2 {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.modal .hint { margin: 0 0 12px; font-size: 12px; color: var(--muted); }
+.modal .form-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 16px;
 }
 .designs-grid {
   display: grid;
