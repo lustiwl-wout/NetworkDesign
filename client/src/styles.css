@@ -1462,6 +1462,28 @@ html, body, #root {
   background: var(--bg);
 }
 
+/* Bend handle: the single adjustable grip on a Z-shape edge. Slim
+   pill-shaped so it visually reads as "grab this segment" rather
+   than "a point on the line". Faint by default, brightens on hover
+   so it doesn't shout at you from the canvas. */
+.edge-bend-handle {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border-radius: 3px;
+  background: var(--node-bg);
+  border: 2px solid var(--accent);
+  pointer-events: all;
+  z-index: 30;
+  opacity: 0.45;
+  transition: opacity 0.12s, background 0.12s;
+}
+.edge-bend-handle:hover { opacity: 1; background: var(--accent); }
+.edge-bend-handle:active { opacity: 1; background: var(--accent); }
+/* Hide when presenting / exporting. */
+.app.presenting .edge-bend-handle,
+.exporting .edge-bend-handle { display: none !important; }
+
 .handle-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

@@ -2,22 +2,23 @@ import { useContext, useEffect, useRef } from 'react';
 import { useStore, useReactFlow, EdgeLabelRenderer, Position } from 'reactflow';
 import { EditorCtx } from './EditorCtx.js';
 
-// Custom orthogonal edge.
+// Orthogonal edge with a BOUNDED, ADJUSTABLE path.
 //
-// Routing: the line exits each node perpendicular to the anchor side
-// via a short stub, passes through any user-placed waypoints in
-// order, and enters the target perpendicular to its anchor side.
-// Between consecutive stops we use at most one 90° elbow — no A*,
-// no obstacle avoidance; if the line crosses something you don't
-// want, grab the line and drag a bend out.
+// Routing is fully determined by the two anchor positions and sides:
+//   * If the stubs are already collinear → single straight segment.
+//   * If the stubs exit on perpendicular axes → L-shape, 1 elbow.
+//   * If the stubs exit on the same axis but aren't collinear → Z-shape,
+//     2 elbows with a middle segment that can be shifted perpendicular
+//     by the user.
 //
-// The only control is the line itself:
-//   * Grab anywhere along the stroke and drag → a bend appears
-//     under your cursor and follows it.
-//   * Grab near an existing bend and drag → the bend moves.
-//   * Drag a bend back into alignment with its neighbours → it
-//     collapses away automatically on release.
-// No separate handles or squares; the canvas stays clean.
+// The only user control is the Z-middle segment: grab it and drag
+// perpendicular to shift where the bend happens. Straight and L-
+// shape edges are not adjustable — to change those, move the
+// endpoints or use a different connection handle on the node.
+//
+// Data: `data.bend` is a single number (pixels) that shifts the
+// Z-middle segment away from its natural midpoint. Undefined / null
+// means "use natural midpoint".
 
 const STUB = 30;
 const GRID = 10;
@@ -48,37 +49,12 @@ export default function SmartEdge(props) {
   const ss = stubOut(sa);
   const ts = stubOut(ta);
 
-  const waypoints = (props.data?.waypoints ?? []).map((p) => ({
-    x: snap(p.x),
-    y: snap(p.y),
-  }));
-
-  // Build each leg between consecutive stops. Stops are
-  // [ss, wp0, ..., wpN-1, ts]; leg i routes stops[i] → stops[i+1].
-  const stops = [ss, ...waypoints, ts];
-  const legs = [];
-  let axis = axisOfSide(sa.side);
-  for (let i = 0; i < stops.length - 1; i++) {
-    const forceExit = i === stops.length - 2 ? axisOfSide(ta.side) : null;
-    const { points, exitAxis } = orthogonalLeg(stops[i], stops[i + 1], axis, forceExit);
-    legs.push(points);
-    axis = exitAxis;
-  }
-
-  // Flatten into the full polyline (sa + ss-leg + ... + ts-leg + ta).
-  const full = [sa];
-  full.push(...legs[0]);
-  for (let i = 1; i < legs.length; i++) full.push(...legs[i].slice(1));
-  full.push(ta);
-  const pathPoints = simplify(full);
-  const d = polyline(pathPoints);
-
-  const centre = pathPoints[Math.floor(pathPoints.length / 2)];
+  const userBend = Number.isFinite(props.data?.bend) ? props.data.bend : null;
+  const { points, middle } = route(sa, ss, ts, ta, userBend);
+  const d = polyline(points);
 
   return (
     <>
-      {/* The visible stroke. Pointer events on this path become the
-          line-drag affordance (handled by LineDragTarget below). */}
       <path
         id={id}
         d={d}
@@ -89,101 +65,152 @@ export default function SmartEdge(props) {
         style={{ ...style, pointerEvents: 'none' }}
         markerEnd={markerEnd}
       />
-      {/* Wide invisible stroke: real hit target for drag / click. */}
-      <LineDragTarget edgeId={id} d={d} waypoints={waypoints} legs={legs} />
+      {/* Clickable stroke for edge-selection — but NOT drag-to-bend. */}
+      <path
+        d={d}
+        fill="none"
+        stroke="transparent"
+        strokeWidth="16"
+        style={{ pointerEvents: 'stroke', cursor: 'pointer' }}
+      />
       {label && (
         <EdgeLabelRenderer>
           <div
             className="react-flow__edge-label-floating"
-            style={{ transform: `translate(-50%, -50%) translate(${centre.x}px, ${centre.y}px)` }}
+            style={{
+              transform: `translate(-50%, -50%) translate(${points[Math.floor(points.length / 2)].x}px, ${points[Math.floor(points.length / 2)].y}px)`,
+            }}
           >
             {label}
           </div>
+        </EdgeLabelRenderer>
+      )}
+      {middle && (
+        <EdgeLabelRenderer>
+          <BendHandle edgeId={id} middle={middle} />
         </EdgeLabelRenderer>
       )}
     </>
   );
 }
 
-// ---- Line drag: grab the stroke anywhere and pull out a waypoint ----
+// ---- Routing ----
 
-// Invisible wide-stroke path that absorbs pointerdown on the line.
-// Until the pointer actually moves, we don't touch state (that lets
-// React Flow still select the edge on a plain click). On the first
-// move, we work out which leg was grabbed, splice a waypoint there,
-// and track it. On release we collapse it if it's collinear with its
-// neighbours so no ghost dots are left behind.
-function LineDragTarget({ edgeId, d, waypoints, legs }) {
+// Given source/target anchors (with side) and their stubs, return the
+// full polyline [sa, ss, ..., ts, ta] plus a description of the
+// "middle segment" (the user-adjustable one) if any.
+function route(sa, ss, ts, ta, userBend) {
+  const saAxis = axisOfSide(sa.side);
+  const taAxis = axisOfSide(ta.side);
+
+  // --- Straight (single segment between stubs) ---
+  if (saAxis === 'h' && taAxis === 'h' && ss.y === ts.y) {
+    return { points: simplify([sa, ss, ts, ta]), middle: null };
+  }
+  if (saAxis === 'v' && taAxis === 'v' && ss.x === ts.x) {
+    return { points: simplify([sa, ss, ts, ta]), middle: null };
+  }
+
+  // --- L-shape (axes differ, one elbow) ---
+  if (saAxis !== taAxis) {
+    const elbow = saAxis === 'h'
+      ? { x: ts.x, y: ss.y }
+      : { x: ss.x, y: ts.y };
+    return { points: simplify([sa, ss, elbow, ts, ta]), middle: null };
+  }
+
+  // --- Z-shape (same axis, not aligned) — adjustable middle ---
+  if (saAxis === 'h') {
+    // Middle segment is vertical. Its x is the adjustable coordinate.
+    const natural = snap((ss.x + ts.x) / 2);
+    const shift = userBend == null ? 0 : userBend;
+    const midX = snap(natural + shift);
+    const e1 = { x: midX, y: ss.y };
+    const e2 = { x: midX, y: ts.y };
+    return {
+      points: simplify([sa, ss, e1, e2, ts, ta]),
+      middle: {
+        axis: 'v',          // middle segment is vertical
+        natural,             // natural perpendicular coordinate (x in this case)
+        current: midX,       // current perpendicular coordinate
+        at: { x: midX, y: snap((ss.y + ts.y) / 2) }, // handle position
+      },
+    };
+  }
+  // saAxis === 'v': middle segment is horizontal, y adjustable
+  const natural = snap((ss.y + ts.y) / 2);
+  const shift = userBend == null ? 0 : userBend;
+  const midY = snap(natural + shift);
+  const e1 = { x: ss.x, y: midY };
+  const e2 = { x: ts.x, y: midY };
+  return {
+    points: simplify([sa, ss, e1, e2, ts, ta]),
+    middle: {
+      axis: 'h',
+      natural,
+      current: midY,
+      at: { x: snap((ss.x + ts.x) / 2), y: midY },
+    },
+  };
+}
+
+function axisOfSide(side) {
+  return (side === Position.Left || side === Position.Right) ? 'h' : 'v';
+}
+
+// ---- Bend handle: drag the middle segment perpendicular ----
+
+function BendHandle({ edgeId, middle }) {
   const ref = useRef(null);
   const { screenToFlowPosition } = useReactFlow();
   const { setEdges } = useContext(EditorCtx);
-  const state = useRef({ edgeId, waypoints, legs, setEdges, screenToFlowPosition });
-  state.current = { edgeId, waypoints, legs, setEdges, screenToFlowPosition };
+  const state = useRef({ edgeId, middle, setEdges, screenToFlowPosition });
+  state.current = { edgeId, middle, setEdges, screenToFlowPosition };
 
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
     let activePointer = null;
-    let downFlow = null;   // flow-space pointer position at pointerdown
-    let ownedIdx = null;   // index of the waypoint we've inserted
-    let insertLegIdx = null;
 
     const onDown = (e) => {
       if (e.button !== undefined && e.button !== 0) return;
-      const s = state.current;
-      const pt = s.screenToFlowPosition({ x: e.clientX, y: e.clientY });
-      if (!pt || !Number.isFinite(pt.x) || !Number.isFinite(pt.y)) return;
       e.preventDefault();
       e.stopPropagation();
       activePointer = e.pointerId;
-      downFlow = { x: snap(pt.x), y: snap(pt.y) };
-      ownedIdx = null;
-      insertLegIdx = closestLegIndex(downFlow, s.legs);
       try { el.setPointerCapture(e.pointerId); } catch {}
     };
-
     const onMove = (e) => {
       if (activePointer == null || e.pointerId !== activePointer) return;
       e.preventDefault();
       const s = state.current;
       const pt = s.screenToFlowPosition({ x: e.clientX, y: e.clientY });
       if (!pt || !Number.isFinite(pt.x) || !Number.isFinite(pt.y)) return;
-      const newPt = { x: snap(pt.x), y: snap(pt.y) };
-      // Wait for a real drag (> a few px) so a plain click doesn't
-      // insert a phantom waypoint.
-      if (ownedIdx === null) {
-        const dx = Math.abs(newPt.x - (downFlow?.x ?? newPt.x));
-        const dy = Math.abs(newPt.y - (downFlow?.y ?? newPt.y));
-        if (dx + dy < GRID) return;
-      }
+      // Only the perpendicular axis matters. For a vertical middle
+      // segment (axis: 'v'), the adjustable coordinate is x; for a
+      // horizontal middle segment it's y. `bend` is the shift away
+      // from the natural midpoint, in flow pixels.
+      const raw = s.middle.axis === 'v' ? pt.x : pt.y;
+      const bend = snap(raw) - s.middle.natural;
       s.setEdges((eds) => eds.map((ed) => {
         if (ed.id !== s.edgeId) return ed;
-        const wps = [...(ed.data?.waypoints ?? [])];
-        if (ownedIdx === null) {
-          const at = Math.max(0, Math.min(insertLegIdx ?? wps.length, wps.length));
-          wps.splice(at, 0, newPt);
-          ownedIdx = at;
-        } else {
-          wps[ownedIdx] = newPt;
-        }
-        return { ...ed, data: { ...(ed.data ?? {}), waypoints: wps } };
+        return { ...ed, data: { ...(ed.data ?? {}), bend } };
       }));
     };
-
     const onUp = () => {
       if (activePointer == null) return;
       try { el.releasePointerCapture(activePointer); } catch {}
       activePointer = null;
-      downFlow = null;
-      const movedIdx = ownedIdx;
-      ownedIdx = null;
-      insertLegIdx = null;
-      if (movedIdx == null) return;
-      // Drag ended — compact redundant waypoints.
-      state.current.setEdges((eds) => eds.map((ed) => {
-        if (ed.id !== state.current.edgeId) return ed;
-        const wps = compactWaypoints(ed.data?.waypoints ?? []);
-        return { ...ed, data: { ...(ed.data ?? {}), waypoints: wps } };
+      // If the bend lands (nearly) back at the natural midpoint,
+      // drop it so the path snaps back to auto.
+      const s = state.current;
+      s.setEdges((eds) => eds.map((ed) => {
+        if (ed.id !== s.edgeId) return ed;
+        const cur = Number.isFinite(ed.data?.bend) ? ed.data.bend : 0;
+        if (Math.abs(cur) < GRID) {
+          const { bend, ...rest } = ed.data ?? {};
+          return { ...ed, data: rest };
+        }
+        return ed;
       }));
     };
 
@@ -201,98 +228,24 @@ function LineDragTarget({ edgeId, d, waypoints, legs }) {
     };
   }, []);
 
+  const cursor = middle.axis === 'v' ? 'ew-resize' : 'ns-resize';
   return (
-    <path
+    <div
       ref={ref}
-      d={d}
-      fill="none"
-      stroke="transparent"
-      strokeWidth="18"
-      className="nopan nodrag"
-      style={{ pointerEvents: 'stroke', cursor: 'grab', touchAction: 'none' }}
+      className="edge-bend-handle nodrag nopan"
+      style={{
+        transform: `translate(-50%, -50%) translate(${middle.at.x}px, ${middle.at.y}px)`,
+        touchAction: 'none',
+        cursor,
+      }}
+      title="Drag to shift the bend"
     />
   );
 }
 
-// Find the leg whose path is closest to point `p`. Returns the leg
-// index in 0..legs.length-1. Used to decide where a new waypoint
-// should be inserted when the user grabs the line.
-function closestLegIndex(p, legs) {
-  let bestI = 0;
-  let bestD = Infinity;
-  for (let i = 0; i < legs.length; i++) {
-    const leg = legs[i];
-    for (let j = 1; j < leg.length; j++) {
-      const d = distToSegment(p, leg[j - 1], leg[j]);
-      if (d < bestD) { bestD = d; bestI = i; }
-    }
-  }
-  return bestI;
-}
-
-// Manhattan distance from p to the axis-aligned segment a→b.
-function distToSegment(p, a, b) {
-  if (a.x === b.x) {
-    const y = Math.max(Math.min(a.y, b.y), Math.min(p.y, Math.max(a.y, b.y)));
-    return Math.abs(p.x - a.x) + Math.abs(p.y - y);
-  }
-  const x = Math.max(Math.min(a.x, b.x), Math.min(p.x, Math.max(a.x, b.x)));
-  return Math.abs(p.y - a.y) + Math.abs(p.x - x);
-}
-
-// Remove waypoints that are collinear with / on the straight-line
-// segment between their immediate neighbours. Keeps the data clean
-// so no orphan handles accumulate.
-function compactWaypoints(wps) {
-  if (wps.length === 0) return wps;
-  let changed = true;
-  let cur = [...wps];
-  while (changed) {
-    changed = false;
-    for (let i = 0; i < cur.length; i++) {
-      const prev = cur[i - 1] ?? null;
-      const next = cur[i + 1] ?? null;
-      if (!prev || !next) continue;
-      // Redundant if on the axis-aligned straight between neighbours.
-      if (prev.x === next.x && cur[i].x === prev.x) { cur.splice(i, 1); changed = true; break; }
-      if (prev.y === next.y && cur[i].y === prev.y) { cur.splice(i, 1); changed = true; break; }
-    }
-  }
-  return cur;
-}
-
-// ---- Geometry ----
+// ---- Geometry helpers ----
 
 const snap = (v) => Math.round(v / GRID) * GRID;
-
-function axisOfSide(side) {
-  return (side === Position.Left || side === Position.Right) ? 'h' : 'v';
-}
-
-// Build a 0- or 1-elbow path from `from` to `to`. `entryAxis` is the
-// direction the line arrives in; `forceExitAxis` pins the last
-// segment's direction (used for the final leg so the line meets the
-// target stub perpendicularly).
-function orthogonalLeg(from, to, entryAxis, forceExitAxis) {
-  if (from.x === to.x) return { points: [from, to], exitAxis: 'v' };
-  if (from.y === to.y) return { points: [from, to], exitAxis: 'h' };
-  let elbow;
-  let exit;
-  if (forceExitAxis === 'v') {
-    elbow = { x: to.x, y: from.y };
-    exit = 'v';
-  } else if (forceExitAxis === 'h') {
-    elbow = { x: from.x, y: to.y };
-    exit = 'h';
-  } else if (entryAxis === 'h') {
-    elbow = { x: to.x, y: from.y };
-    exit = 'v';
-  } else {
-    elbow = { x: from.x, y: to.y };
-    exit = 'h';
-  }
-  return { points: [from, elbow, to], exitAxis: exit };
-}
 
 function anchorFromHandle(node, handleId) {
   if (!node || !handleId) return null;
