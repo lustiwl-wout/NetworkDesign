@@ -440,9 +440,21 @@ function Editor({ me }) {
       || !shallowEqualGraph(snap.edges, edgesRef.current);
   }, []);
 
+  // Block autosave until the user has named the design. Creating
+  // phantom "Untitled design" rows every time someone opens the
+  // editor and drags a node around pollutes the designs list.
+  // Loaded designs (currentId set) still save on every edit
+  // regardless of name, because the user already committed to
+  // that design and its name is theirs to change.
+  const hasRealName = useCallback(() => {
+    const n = (nameRef.current ?? '').trim();
+    return !!n && n !== 'Untitled design';
+  }, []);
+
   const doSave = useCallback(async () => {
     if (!canSave) return;
     if (!isDirty()) return;
+    if (!currentIdRef.current && !hasRealName()) return;
     const graph = { nodes: nodesRef.current, edges: edgesRef.current };
     const nm = nameRef.current;
     try {
@@ -479,6 +491,7 @@ function Editor({ me }) {
     if (!canSave) return;
     const onHide = () => {
       if (!isDirty()) return;
+      if (!currentIdRef.current && !hasRealName()) return;
       const body = JSON.stringify({
         name: nameRef.current,
         graph: { nodes: nodesRef.current, edges: edgesRef.current },
@@ -498,18 +511,7 @@ function Editor({ me }) {
     };
     window.addEventListener('pagehide', onHide);
     return () => window.removeEventListener('pagehide', onHide);
-  }, [canSave, isDirty]);
-
-  const deleteDesign = async () => {
-    if (!currentId) return;
-    if (!confirm(`Delete "${name}"?`)) return;
-    try {
-      await api.remove(currentId);
-      newDesign();
-      refreshList();
-      flash('Deleted');
-    } catch (e) { flash(`Delete failed: ${e.message}`); }
-  };
+  }, [canSave, isDirty, hasRealName]);
 
   const exportPng = async ({ includeLegend, transparent }) => {
     try {
@@ -793,9 +795,6 @@ function Editor({ me }) {
         <button className="btn secondary" onClick={() => setPresent(true)} title="Enter presentation mode (Esc to exit)">
           Present
         </button>
-        {canSave && currentId && (
-          <button className="btn danger" onClick={deleteDesign}>Delete</button>
-        )}
         {isAdmin && (
           <a className="btn secondary" href="/admin" title="Admin portal">Admin</a>
         )}
