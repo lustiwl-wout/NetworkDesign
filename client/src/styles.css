@@ -1075,12 +1075,13 @@ html, body, #root {
 }
 .annotation-body { white-space: pre-wrap; }
 
-/* Presentation mode — hide palette, topbar, inspector; canvas full screen */
+/* Presentation mode — hide palette, topbar, inspector; canvas full screen.
+   Controls (zoom / fit / lock) stay visible so the presenter can
+   navigate during a demo. Minimap hidden to keep the slide clean. */
 .app.presenting { grid-template-columns: 0 1fr; }
 .app.presenting .topbar,
 .app.presenting .palette,
 .app.presenting .inspector-popup,
-.app.presenting .react-flow__controls,
 .app.presenting .react-flow__minimap {
   display: none !important;
 }
