@@ -120,6 +120,23 @@ html, body, #root {
   border-bottom: 1px solid var(--border);
 }
 
+/* Uniform topbar action buttons — same min-width and height across
+   New / Designs / Export / Present / status chip / Delete / Admin /
+   profile, so the chrome reads as a tidy row. The theme button is
+   intentionally excluded; it's an icon-tile, not a labelled action. */
+.topbar .btn:not(.theme-btn),
+.topbar a.btn,
+.topbar .save-status {
+  min-width: 104px;
+  height: 32px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  line-height: 1;
+}
+
 .topbar h1 {
   font-size: 15px;
   margin: 0;
