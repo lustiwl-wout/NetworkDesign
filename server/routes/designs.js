@@ -23,16 +23,36 @@ const MAX_VERSIONS = 50;
 
 function whereVisibleToUser(user, alias = 'designs') {
   if (user.role === 'admin') return { clause: '', params: [] };
-  return { clause: `WHERE ${alias}.owner_id = $1`, params: [user.id] };
+  // Non-admins see their own designs OR any design scoped to a team
+  // they're a member of.
+  return {
+    clause: `
+      WHERE ${alias}.owner_id = $1
+         OR ${alias}.team_id IN (
+              SELECT team_id FROM team_members WHERE user_id = $1
+            )
+    `,
+    params: [user.id],
+  };
 }
 
 async function canAccess(designId, user) {
-  const { rows } = await pool.query('SELECT owner_id FROM designs WHERE id = $1', [designId]);
+  const { rows } = await pool.query(
+    'SELECT owner_id, team_id FROM designs WHERE id = $1',
+    [designId]
+  );
   if (!rows.length) return { status: 404 };
-  if (user.role !== 'admin' && rows[0].owner_id && rows[0].owner_id !== user.id) {
-    return { status: 403 };
+  if (user.role === 'admin') return { status: 200 };
+  const { owner_id, team_id } = rows[0];
+  if (owner_id === user.id) return { status: 200 };
+  if (team_id != null) {
+    const { rows: m } = await pool.query(
+      'SELECT 1 FROM team_members WHERE team_id = $1 AND user_id = $2',
+      [team_id, user.id]
+    );
+    if (m.length) return { status: 200 };
   }
-  return { status: 200 };
+  return { status: 403 };
 }
 
 async function snapshotVersion(designId, user) {
@@ -73,11 +93,13 @@ designsRouter.get('/', async (req, res, next) => {
     // "Clients" folder is its own space.
     const { rows } = await pool.query(
       `SELECT d.id, d.name, d.description, d.folder, d.owner_id,
-              d.narrative, d.updated_at,
+              d.team_id, d.narrative, d.updated_at,
               u.email        AS owner_email,
-              u.display_name AS owner_name
+              u.display_name AS owner_name,
+              t.name         AS team_name
          FROM designs d
          LEFT JOIN users u ON u.id = d.owner_id
+         LEFT JOIN teams t ON t.id = d.team_id
          ${clause}
         ORDER BY d.updated_at DESC`,
       params
@@ -91,23 +113,42 @@ designsRouter.get('/:id', async (req, res, next) => {
     const chk = await canAccess(req.params.id, req.auth.user);
     if (chk.status !== 200) return res.status(chk.status).json({ error: 'not found' });
     const { rows } = await pool.query(
-      `SELECT id, name, description, folder, graph, narrative, owner_id, created_at, updated_at
-         FROM designs WHERE id = $1`,
+      `SELECT d.id, d.name, d.description, d.folder, d.graph, d.narrative,
+              d.owner_id, d.team_id, d.created_at, d.updated_at,
+              t.name AS team_name
+         FROM designs d
+         LEFT JOIN teams t ON t.id = d.team_id
+        WHERE d.id = $1`,
       [req.params.id]
     );
     res.json(rows[0]);
   } catch (err) { next(err); }
 });
 
+// Sanity-check that the caller is allowed to assign a design to the
+// given team — admins can pick any, non-admins must be a member.
+async function canUseTeam(user, teamId) {
+  if (teamId == null) return true;
+  if (user.role === 'admin') return true;
+  const { rows } = await pool.query(
+    'SELECT 1 FROM team_members WHERE team_id = $1 AND user_id = $2',
+    [teamId, user.id]
+  );
+  return rows.length > 0;
+}
+
 designsRouter.post('/', rejectViewerWrites, async (req, res, next) => {
   try {
-    const { name, description = '', folder, graph = EMPTY_GRAPH, narrative = {} } = req.body ?? {};
+    const { name, description = '', folder, teamId = null, graph = EMPTY_GRAPH, narrative = {} } = req.body ?? {};
     if (!name || typeof name !== 'string') return res.status(400).json({ error: 'name is required' });
+    if (!(await canUseTeam(req.auth.user, teamId))) {
+      return res.status(403).json({ error: 'not a member of that team' });
+    }
     const { rows } = await pool.query(
-      `INSERT INTO designs (name, description, folder, graph, narrative, owner_id)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       RETURNING id, name, description, folder, graph, narrative, owner_id, created_at, updated_at`,
-      [name, description, normalizeFolder(folder), graph, narrative, req.auth.user.id]
+      `INSERT INTO designs (name, description, folder, team_id, graph, narrative, owner_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING id, name, description, folder, team_id, graph, narrative, owner_id, created_at, updated_at`,
+      [name, description, normalizeFolder(folder), teamId, graph, narrative, req.auth.user.id]
     );
     await snapshotVersion(rows[0].id, req.auth.user);
     res.status(201).json(rows[0]);
@@ -119,21 +160,27 @@ designsRouter.put('/:id', rejectViewerWrites, async (req, res, next) => {
     const chk = await canAccess(req.params.id, req.auth.user);
     if (chk.status !== 200) return res.status(chk.status).json({ error: 'not found' });
 
-    const { name, description, folder, graph, narrative } = req.body ?? {};
-    // Folder uses a tri-state: `undefined` means "don't touch", `null`
-    // or empty string means "unfile", any non-empty string sets the
-    // folder. `COALESCE` won't work here because null is a valid
-    // assignment, so we pass a flag column.
-    const folderProvided = Object.prototype.hasOwnProperty.call(req.body ?? {}, 'folder');
+    const body = req.body ?? {};
+    const { name, description, folder, teamId, graph, narrative } = body;
+    // Folder + teamId both use a tri-state: omitted = don't touch,
+    // null / empty = clear, value = set. COALESCE can't distinguish
+    // "null meaning clear" from "null meaning omitted", hence the
+    // provided-flags.
+    const folderProvided = Object.prototype.hasOwnProperty.call(body, 'folder');
+    const teamProvided   = Object.prototype.hasOwnProperty.call(body, 'teamId');
+    if (teamProvided && !(await canUseTeam(req.auth.user, teamId))) {
+      return res.status(403).json({ error: 'not a member of that team' });
+    }
     const { rows } = await pool.query(
       `UPDATE designs
          SET name        = COALESCE($2, name),
              description = COALESCE($3, description),
              folder      = CASE WHEN $6::boolean THEN $7 ELSE folder END,
+             team_id     = CASE WHEN $8::boolean THEN $9 ELSE team_id END,
              graph       = COALESCE($4, graph),
              narrative   = COALESCE($5, narrative)
        WHERE id = $1
-       RETURNING id, name, description, folder, graph, narrative, owner_id, created_at, updated_at`,
+       RETURNING id, name, description, folder, team_id, graph, narrative, owner_id, created_at, updated_at`,
       [
         req.params.id,
         name ?? null,
@@ -142,6 +189,8 @@ designsRouter.put('/:id', rejectViewerWrites, async (req, res, next) => {
         narrative ?? null,
         folderProvided,
         folderProvided ? normalizeFolder(folder) : null,
+        teamProvided,
+        teamProvided ? (teamId ?? null) : null,
       ]
     );
     await snapshotVersion(rows[0].id, req.auth.user);

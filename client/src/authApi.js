@@ -62,6 +62,37 @@ export const visitsAdminApi = {
   clear: () => visitsReq('', { method: 'DELETE' }),
 };
 
+async function teamsAdminReq(path, opts = {}) {
+  const res = await fetch(`/api/admin/teams${path}`, {
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    ...opts,
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || `HTTP ${res.status}`);
+  }
+  if (res.status === 204) return null;
+  return res.json();
+}
+export const teamsAdminApi = {
+  list:   ()                    => teamsAdminReq(''),
+  create: (name)                => teamsAdminReq('', { method: 'POST', body: JSON.stringify({ name }) }),
+  rename: (id, name)            => teamsAdminReq(`/${id}`, { method: 'PATCH', body: JSON.stringify({ name }) }),
+  remove: (id)                  => teamsAdminReq(`/${id}`, { method: 'DELETE' }),
+  addMember:    (id, email)     => teamsAdminReq(`/${id}/members`, { method: 'POST', body: JSON.stringify({ email }) }),
+  removeMember: (id, userId)    => teamsAdminReq(`/${id}/members/${userId}`, { method: 'DELETE' }),
+};
+
+async function teamsReq(path) {
+  const res = await fetch(`/api/teams${path}`, { credentials: 'include' });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+export const teamsApi = {
+  mine: () => teamsReq('/mine'),
+};
+
 export const usersAdminApi = {
   list:   ()              => adminReq(''),
   create: (body)          => adminReq('', { method: 'POST', body: JSON.stringify(body) }),

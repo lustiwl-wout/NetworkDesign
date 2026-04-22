@@ -21,7 +21,7 @@ import LoginPage from './LoginPage.jsx';
 import ProfilePage from './ProfilePage.jsx';
 import { api } from './api.js';
 import { deviceTypesApi, zoneTypesApi, edgeKindsApi } from './catalogApi.js';
-import { authApi } from './authApi.js';
+import { authApi, teamsApi } from './authApi.js';
 import {
   applyKind,
   getEdgeKinds,
@@ -146,6 +146,10 @@ function Editor({ me }) {
   const [edgeKinds, setEdgeKindsState] = useState(getEdgeKinds());
   const [currentId, setCurrentId] = useState(null);
   const [name, setName] = useState('Untitled design');
+  // Optional team scope. null = personal design. Loaded per-design,
+  // defaults to null for a new blank editor.
+  const [teamId, setTeamId] = useState(null);
+  const [myTeams, setMyTeams] = useState([]);
   const [selectedNode, setSelectedNode] = useState(null);
   const [selectedEdge, setSelectedEdge] = useState(null);
   const [toast, setToast] = useState(null);
@@ -184,6 +188,15 @@ function Editor({ me }) {
     })();
   }, [currentId]);
 
+  // My teams — loaded once after sign-in; drives the editor's team
+  // picker and caps which team a new design can be scoped to.
+  useEffect(() => {
+    if (!me) return;
+    (async () => {
+      try { setMyTeams(await teamsApi.mine()); } catch { setMyTeams([]); }
+    })();
+  }, [me]);
+
   // Escape exits presentation mode
   useEffect(() => {
     if (!present) return;
@@ -208,6 +221,7 @@ function Editor({ me }) {
         const d = await api.get(designId);
         setCurrentId(d.id);
         setName(d.name);
+        setTeamId(d.team_id ?? null);
         const loadedNodes = d.graph?.nodes ?? [];
         const loadedEdges = styleEdges(d.graph?.edges ?? []);
         setNodes(loadedNodes);
@@ -216,6 +230,7 @@ function Editor({ me }) {
           nodes: JSON.parse(JSON.stringify(loadedNodes)),
           edges: JSON.parse(JSON.stringify(loadedEdges)),
           name: d.name,
+          teamId: d.team_id ?? null,
         };
       } catch (e) {
         console.error('Failed to auto-load design:', e);
@@ -401,9 +416,10 @@ function Editor({ me }) {
   const newDesign = () => {
     setCurrentId(null);
     setName('Untitled design');
+    setTeamId(null);
     setNodes([]);
     setEdges([]);
-    lastSavedRef.current = { nodes: [], edges: [], name: 'Untitled design' };
+    lastSavedRef.current = { nodes: [], edges: [], name: 'Untitled design', teamId: null };
     setSelectedNode(null);
     setSelectedEdge(null);
   };
@@ -413,6 +429,7 @@ function Editor({ me }) {
       const d = await api.get(id);
       setCurrentId(d.id);
       setName(d.name);
+      setTeamId(d.team_id ?? null);
       setNodes(d.graph?.nodes ?? []);
       setEdges(styleEdges(d.graph?.edges ?? []));
       flash(`Loaded "${d.name}"`);
@@ -427,6 +444,8 @@ function Editor({ me }) {
   const saveTimerRef = useRef(null);
   const nameRef = useRef(name);
   nameRef.current = name;
+  const teamIdRef = useRef(teamId);
+  teamIdRef.current = teamId;
   const currentIdRef = useRef(currentId);
   currentIdRef.current = currentId;
 
@@ -436,6 +455,7 @@ function Editor({ me }) {
     const snap = lastSavedRef.current;
     if (!snap) return true;
     return snap.name !== nameRef.current
+      || (snap.teamId ?? null) !== (teamIdRef.current ?? null)
       || !shallowEqualGraph(snap.nodes, nodesRef.current)
       || !shallowEqualGraph(snap.edges, edgesRef.current);
   }, []);
@@ -457,18 +477,20 @@ function Editor({ me }) {
     if (!currentIdRef.current && !hasRealName()) return;
     const graph = { nodes: nodesRef.current, edges: edgesRef.current };
     const nm = nameRef.current;
+    const tid = teamIdRef.current ?? null;
     try {
       let d;
       if (currentIdRef.current) {
-        d = await api.update(currentIdRef.current, { name: nm, graph });
+        d = await api.update(currentIdRef.current, { name: nm, graph, teamId: tid });
       } else {
-        d = await api.create({ name: nm, graph });
+        d = await api.create({ name: nm, graph, teamId: tid });
         setCurrentId(d.id);
       }
       lastSavedRef.current = {
         nodes: JSON.parse(JSON.stringify(nodesRef.current)),
         edges: JSON.parse(JSON.stringify(edgesRef.current)),
         name: nm,
+        teamId: tid,
       };
     } catch (e) {
       flash(`Autosave failed: ${e.message}`);
@@ -483,7 +505,7 @@ function Editor({ me }) {
     clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => { doSave(); }, 1500);
     return () => clearTimeout(saveTimerRef.current);
-  }, [nodes, edges, name, canSave, doSave, isDirty]);
+  }, [nodes, edges, name, teamId, canSave, doSave, isDirty]);
 
   // Save on tab close / navigation / reload. `keepalive: true` lets
   // the request complete after the page is unloading.
@@ -495,6 +517,7 @@ function Editor({ me }) {
       const body = JSON.stringify({
         name: nameRef.current,
         graph: { nodes: nodesRef.current, edges: edgesRef.current },
+        teamId: teamIdRef.current ?? null,
       });
       const id = currentIdRef.current;
       const url = id ? `/api/designs/${id}` : '/api/designs';
@@ -721,6 +744,19 @@ function Editor({ me }) {
             if (name === 'Untitled design') e.target.select();
           }}
         />
+        {canSave && myTeams.length > 0 && (
+          <select
+            className="topbar-team-picker"
+            value={teamId ?? ''}
+            onChange={(e) => setTeamId(e.target.value ? Number(e.target.value) : null)}
+            title="Team this design belongs to"
+          >
+            <option value="">Personal</option>
+            {myTeams.map((t) => (
+              <option key={t.id} value={t.id}>{t.name}</option>
+            ))}
+          </select>
+        )}
         <button
           type="button"
           className="btn secondary theme-btn"

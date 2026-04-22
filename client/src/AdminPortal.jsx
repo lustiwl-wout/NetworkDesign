@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import DeviceIcon, { ICON_KEYS } from './DeviceIcons.jsx';
 import { deviceTypesApi, zoneTypesApi, edgeKindsApi } from './catalogApi.js';
 import UsersAdmin from './UsersAdmin.jsx';
+import TeamsAdmin from './TeamsAdmin.jsx';
 import AccessLogAdmin from './AccessLogAdmin.jsx';
 
 const BLANK_DEVICE = {
@@ -51,6 +52,10 @@ export default function AdminPortal() {
             onClick={() => setTab('users')}
           >Users</button>
           <button
+            className={`tab${tab === 'teams' ? ' active' : ''}`}
+            onClick={() => setTab('teams')}
+          >Teams</button>
+          <button
             className={`tab${tab === 'access' ? ' active' : ''}`}
             onClick={() => setTab('access')}
           >Access log</button>
@@ -64,6 +69,7 @@ export default function AdminPortal() {
         {tab === 'zones'   && <ZoneAdmin />}
         {tab === 'edges'   && <EdgeKindAdmin />}
         {tab === 'users'   && <UsersAdmin />}
+        {tab === 'teams'   && <TeamsAdmin />}
         {tab === 'access'  && <AccessLogAdmin />}
       </main>
     </div>

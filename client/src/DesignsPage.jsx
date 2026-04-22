@@ -82,23 +82,29 @@ export default function DesignsPage({ me }) {
     me ? items.filter((d) => d.owner_id === me.id).map((d) => d.folder).filter(Boolean) : []
   ), [items, me]);
 
-  // Filter + group. A "group" is a (ownerId, folder) pair so each
-  // person's Clients folder is its own section. Query matches name,
-  // folder, and owner.
+  // Filter + group. A team-scoped design groups by the team, not
+  // the individual owner — so every team member contributes into
+  // the same "Team X / Folder Y" section. Personal designs still
+  // group by (owner, folder).
   const groups = useMemo(() => {
     const q = query.trim().toLowerCase();
     const filtered = items.filter((d) => {
       if (!q) return true;
       return (d.name ?? '').toLowerCase().includes(q)
         || (d.folder ?? '').toLowerCase().includes(q)
-        || (d.owner_email ?? '').toLowerCase().includes(q);
+        || (d.owner_email ?? '').toLowerCase().includes(q)
+        || (d.team_name ?? '').toLowerCase().includes(q);
     });
     const map = new Map();
     for (const d of filtered) {
-      const key = `${d.owner_id ?? 'x'}::${d.folder ?? UNFILED}`;
+      const teamKey = d.team_id ? `T${d.team_id}` : `U${d.owner_id ?? 'x'}`;
+      const key = `${teamKey}::${d.folder ?? UNFILED}`;
       if (!map.has(key)) {
         map.set(key, {
           key,
+          scope: d.team_id ? 'team' : 'user',
+          teamId: d.team_id ?? null,
+          teamName: d.team_name ?? null,
           ownerId: d.owner_id,
           ownerEmail: d.owner_email,
           ownerName: d.owner_name,
@@ -108,17 +114,23 @@ export default function DesignsPage({ me }) {
       }
       map.get(key).designs.push(d);
     }
-    // Order: my own groups first (folder A-Z, Unfiled last),
-    // then other owners alphabetically (same inner sort).
+    // Order:
+    //   1) personal groups I own
+    //   2) team groups I'm a member of
+    //   3) everything else (admins see other users' groups)
+    // Inner: folder A-Z with Unfiled last.
     const mine = me ? me.id : null;
     const all = [...map.values()];
     all.sort((a, b) => {
-      const aMine = a.ownerId === mine ? 0 : 1;
-      const bMine = b.ownerId === mine ? 0 : 1;
-      if (aMine !== bMine) return aMine - bMine;
-      const aOwner = (a.ownerEmail ?? '').toLowerCase();
-      const bOwner = (b.ownerEmail ?? '').toLowerCase();
-      if (aOwner !== bOwner) return aOwner.localeCompare(bOwner);
+      const bucket = (g) =>
+        g.scope === 'user' && g.ownerId === mine ? 0 :
+        g.scope === 'team'                         ? 1 :
+                                                     2;
+      const ba = bucket(a), bb = bucket(b);
+      if (ba !== bb) return ba - bb;
+      const la = (a.teamName ?? a.ownerEmail ?? '').toLowerCase();
+      const lb = (b.teamName ?? b.ownerEmail ?? '').toLowerCase();
+      if (la !== lb) return la.localeCompare(lb);
       const aU = a.folder === UNFILED ? 1 : 0;
       const bU = b.folder === UNFILED ? 1 : 0;
       if (aU !== bU) return aU - bU;
@@ -167,13 +179,19 @@ export default function DesignsPage({ me }) {
           </div>
         )}
         {groups.map((g) => {
-          const isMine = g.ownerId === me?.id;
+          const isMine = g.scope === 'user' && g.ownerId === me?.id;
+          const isTeam = g.scope === 'team';
           const folderLabel = g.folder === UNFILED ? 'Unfiled' : g.folder;
           return (
             <section key={g.key} className="designs-group">
               <h2 className="designs-group-title">
                 {folderLabel}
-                {!isMine && (
+                {isTeam && (
+                  <span className="designs-group-owner team">
+                    {g.teamName} · team
+                  </span>
+                )}
+                {!isMine && !isTeam && (
                   <span className="designs-group-owner">
                     {g.ownerName || g.ownerEmail || 'Unknown'}
                   </span>

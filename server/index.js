@@ -8,6 +8,7 @@ import { designsRouter } from './routes/designs.js';
 import { deviceTypesRouter, zoneTypesRouter, edgeKindsRouter } from './routes/catalog.js';
 import { authRouter } from './routes/auth.js';
 import { adminUsersRouter } from './routes/adminUsers.js';
+import { adminTeamsRouter, teamsRouter } from './routes/teams.js';
 import { visitsRouter, adminVisitsRouter } from './routes/visits.js';
 import { attachSession } from './auth/middleware.js';
 import { pool } from './db/pool.js';
@@ -38,7 +39,9 @@ app.get('/api/health', async (_req, res) => {
 app.use('/api/auth', authRouter);
 app.use('/api/visits', visitsRouter);
 app.use('/api/admin/users', adminUsersRouter);
+app.use('/api/admin/teams', adminTeamsRouter);
 app.use('/api/admin/visits', adminVisitsRouter);
+app.use('/api/teams', teamsRouter);
 app.use('/api/designs', designsRouter);
 app.use('/api/device-types', deviceTypesRouter);
 app.use('/api/zone-types', zoneTypesRouter);

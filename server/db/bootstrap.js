@@ -44,6 +44,37 @@ CREATE TABLE IF NOT EXISTS designs (
 ALTER TABLE designs ADD COLUMN IF NOT EXISTS owner_id  INTEGER REFERENCES users(id) ON DELETE SET NULL;
 ALTER TABLE designs ADD COLUMN IF NOT EXISTS narrative JSONB NOT NULL DEFAULT '{}'::jsonb;
 ALTER TABLE designs ADD COLUMN IF NOT EXISTS folder    TEXT;
+ALTER TABLE designs ADD COLUMN IF NOT EXISTS team_id   INTEGER;
+
+-- Teams let users share visibility on a set of designs without
+-- managing individual shares. A design can belong to at most one
+-- team; nulling out team_id returns it to "personal" scope.
+CREATE TABLE IF NOT EXISTS teams (
+  id         SERIAL PRIMARY KEY,
+  name       TEXT NOT NULL UNIQUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS team_members (
+  team_id   INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+  user_id   INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (team_id, user_id)
+);
+
+-- Wire up the designs.team_id FK now that teams exists (can't
+-- reference it in the CREATE TABLE designs block because that
+-- runs before teams on a fresh install).
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.table_constraints
+     WHERE constraint_name = 'designs_team_id_fkey'
+  ) THEN
+    ALTER TABLE designs
+      ADD CONSTRAINT designs_team_id_fkey
+      FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE SET NULL;
+  END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS design_versions (
   id          SERIAL PRIMARY KEY,
