@@ -1461,35 +1461,6 @@ html, body, #root {
   transform: none;
   background: var(--bg);
 }
-/* Waypoint drag handle. Visually an OPEN SQUARE — same metaphor as a
-   resize handle — so users see it as "grab to reshape", not as a
-   connection anchor. */
-.edge-waypoint {
-  position: absolute;
-  width: 14px;
-  height: 14px;
-  border-radius: 2px;
-  background: var(--node-bg);
-  border: 2px solid var(--accent);
-  pointer-events: all;
-  cursor: move;
-  z-index: 30;
-  opacity: 0.35;
-  transition: opacity 0.12s, background 0.12s;
-}
-.edge-waypoint:active { cursor: grabbing; }
-/* Existing waypoint: filled square. Drag it to move, double-click
-   to remove. */
-.edge-waypoint--placed {
-  background: var(--accent);
-  opacity: 0.85;
-  cursor: grab;
-}
-.edge-waypoint--placed:hover { opacity: 1; }
-.edge-waypoint--placed:active { cursor: grabbing; }
-/* Hide during presentation / export. */
-.app.presenting .edge-waypoint,
-.exporting .edge-waypoint { display: none !important; }
 
 .handle-grid {
   display: grid;

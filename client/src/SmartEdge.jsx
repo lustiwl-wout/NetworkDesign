@@ -9,15 +9,15 @@ import { EditorCtx } from './EditorCtx.js';
 // order, and enters the target perpendicular to its anchor side.
 // Between consecutive stops we use at most one 90° elbow — no A*,
 // no obstacle avoidance; if the line crosses something you don't
-// want, grab the line and drag a waypoint out.
+// want, grab the line and drag a bend out.
 //
-// Controls:
-//   * Grab the line and drag it to create a new bend exactly where
-//     you clicked. The waypoint follows your cursor until release.
-//   * Small filled square on every existing waypoint: drag to move
-//     it, double-click to delete it.
-//   * Waypoints that sit on the straight line between their
-//     neighbours are auto-removed on drop — no ghost handles.
+// The only control is the line itself:
+//   * Grab anywhere along the stroke and drag → a bend appears
+//     under your cursor and follows it.
+//   * Grab near an existing bend and drag → the bend moves.
+//   * Drag a bend back into alignment with its neighbours → it
+//     collapses away automatically on release.
+// No separate handles or squares; the canvas stays clean.
 
 const STUB = 30;
 const GRID = 10;
@@ -101,11 +101,6 @@ export default function SmartEdge(props) {
           </div>
         </EdgeLabelRenderer>
       )}
-      <EdgeLabelRenderer>
-        {waypoints.map((wp, i) => (
-          <WaypointMoveHandle key={`wp-${i}`} edgeId={id} wpIndex={i} pos={wp} />
-        ))}
-      </EdgeLabelRenderer>
     </>
   );
 }
@@ -264,93 +259,6 @@ function compactWaypoints(wps) {
     }
   }
   return cur;
-}
-
-// ---- Waypoint move handle ----
-
-function WaypointMoveHandle({ edgeId, wpIndex, pos }) {
-  const ref = useRef(null);
-  const { screenToFlowPosition } = useReactFlow();
-  const { setEdges } = useContext(EditorCtx);
-  const state = useRef({ edgeId, wpIndex, setEdges, screenToFlowPosition });
-  state.current = { edgeId, wpIndex, setEdges, screenToFlowPosition };
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    let activePointer = null;
-
-    const onDown = (e) => {
-      if (e.button !== undefined && e.button !== 0) return;
-      e.preventDefault();
-      e.stopPropagation();
-      activePointer = e.pointerId;
-      try { el.setPointerCapture(e.pointerId); } catch {}
-    };
-    const onMove = (e) => {
-      if (activePointer == null || e.pointerId !== activePointer) return;
-      e.preventDefault();
-      const s = state.current;
-      const pt = s.screenToFlowPosition({ x: e.clientX, y: e.clientY });
-      if (!pt || !Number.isFinite(pt.x) || !Number.isFinite(pt.y)) return;
-      const newPt = { x: snap(pt.x), y: snap(pt.y) };
-      s.setEdges((eds) => eds.map((ed) => {
-        if (ed.id !== s.edgeId) return ed;
-        const wps = [...(ed.data?.waypoints ?? [])];
-        if (s.wpIndex >= 0 && s.wpIndex < wps.length) wps[s.wpIndex] = newPt;
-        return { ...ed, data: { ...(ed.data ?? {}), waypoints: wps } };
-      }));
-    };
-    const onUp = () => {
-      if (activePointer == null) return;
-      try { el.releasePointerCapture(activePointer); } catch {}
-      activePointer = null;
-      // Compact on release so dropping one waypoint onto its
-      // neighbour's line collapses it.
-      const s = state.current;
-      s.setEdges((eds) => eds.map((ed) => {
-        if (ed.id !== s.edgeId) return ed;
-        const wps = compactWaypoints(ed.data?.waypoints ?? []);
-        return { ...ed, data: { ...(ed.data ?? {}), waypoints: wps } };
-      }));
-    };
-
-    el.addEventListener('pointerdown', onDown);
-    el.addEventListener('pointermove', onMove);
-    el.addEventListener('pointerup', onUp);
-    el.addEventListener('pointercancel', onUp);
-    el.addEventListener('lostpointercapture', onUp);
-    return () => {
-      el.removeEventListener('pointerdown', onDown);
-      el.removeEventListener('pointermove', onMove);
-      el.removeEventListener('pointerup', onUp);
-      el.removeEventListener('pointercancel', onUp);
-      el.removeEventListener('lostpointercapture', onUp);
-    };
-  }, []);
-
-  const onDoubleClick = (e) => {
-    e.stopPropagation();
-    const s = state.current;
-    s.setEdges((eds) => eds.map((ed) => {
-      if (ed.id !== s.edgeId) return ed;
-      const wps = (ed.data?.waypoints ?? []).filter((_, j) => j !== s.wpIndex);
-      return { ...ed, data: { ...(ed.data ?? {}), waypoints: wps } };
-    }));
-  };
-
-  return (
-    <div
-      ref={ref}
-      className="edge-waypoint edge-waypoint--placed nodrag nopan"
-      style={{
-        transform: `translate(-50%, -50%) translate(${pos.x}px, ${pos.y}px)`,
-        touchAction: 'none',
-      }}
-      onDoubleClick={onDoubleClick}
-      title="Drag to move · double-click to remove"
-    />
-  );
 }
 
 // ---- Geometry ----
