@@ -37,4 +37,11 @@ export const api = {
   listFolderShares:   (name)          => request(`/designs/folders/${encodeURIComponent(name)}/shares`),
   shareFolder:        (name, email)   => request(`/designs/folders/${encodeURIComponent(name)}/shares`, { method: 'POST', body: JSON.stringify({ email }) }),
   unshareFolder:      (name, userId)  => request(`/designs/folders/${encodeURIComponent(name)}/shares/${userId}`, { method: 'DELETE' }),
+
+  // Versions
+  listVersions:       (id)            => request(`/designs/${id}/versions`),
+  saveMajorVersion:   (id, label)     => request(`/designs/${id}/versions`, { method: 'POST', body: JSON.stringify({ label }) }),
+  updateVersion:      (id, vid, body) => request(`/designs/${id}/versions/${vid}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteVersion:      (id, vid)       => request(`/designs/${id}/versions/${vid}`, { method: 'DELETE' }),
+  restoreVersion:     (id, vid)       => request(`/designs/${id}/versions/${vid}/restore`, { method: 'POST' }),
 };

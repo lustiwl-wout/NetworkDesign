@@ -80,19 +80,27 @@ async function canAccess(designId, user) {
   return { status: 403 };
 }
 
-async function snapshotVersion(designId, user) {
-  // Copy current state into design_versions, then prune older than MAX_VERSIONS.
+// Take a snapshot of the current design state.
+//   * `label` / `isMajor` mark a "release" / milestone the user
+//     wants to keep indefinitely.
+//   * Unlabelled autosave snapshots are pruned once there are more
+//     than MAX_VERSIONS of them per design. Majors are never
+//     pruned regardless of count.
+async function snapshotVersion(designId, user, { label = null, isMajor = false } = {}) {
   await pool.query(
-    `INSERT INTO design_versions (design_id, name, description, graph, narrative, created_by)
-     SELECT id, name, description, graph, narrative, $2 FROM designs WHERE id = $1`,
-    [designId, user.id]
+    `INSERT INTO design_versions
+       (design_id, name, description, graph, narrative, label, is_major, created_by)
+     SELECT id, name, description, graph, narrative, $2, $3, $4
+       FROM designs WHERE id = $1`,
+    [designId, label, !!isMajor, user.id]
   );
   await pool.query(
     `DELETE FROM design_versions
        WHERE design_id = $1
+         AND is_major = FALSE
          AND id NOT IN (
            SELECT id FROM design_versions
-             WHERE design_id = $1
+             WHERE design_id = $1 AND is_major = FALSE
              ORDER BY created_at DESC
              LIMIT $2
          )`,
@@ -404,7 +412,8 @@ designsRouter.get('/:id/versions', async (req, res, next) => {
     const chk = await canAccess(req.params.id, req.auth.user);
     if (chk.status !== 200) return res.status(chk.status).json({ error: 'not found' });
     const { rows } = await pool.query(
-      `SELECT v.id, v.name, v.description, v.created_at, v.created_by,
+      `SELECT v.id, v.name, v.description, v.label, v.is_major,
+              v.created_at, v.created_by,
               u.email   AS created_by_email
          FROM design_versions v
     LEFT JOIN users u ON u.id = v.created_by
@@ -413,6 +422,64 @@ designsRouter.get('/:id/versions', async (req, res, next) => {
       [req.params.id]
     );
     res.json(rows);
+  } catch (err) { next(err); }
+});
+
+// Snapshot the current state as a named major version. Unlike the
+// autosave-driven snapshots in snapshotVersion, this one is pinned
+// and won't be pruned.
+designsRouter.post('/:id/versions', rejectViewerWrites, async (req, res, next) => {
+  try {
+    const chk = await canAccess(req.params.id, req.auth.user);
+    if (chk.status !== 200) return res.status(chk.status).json({ error: 'not found' });
+    const { label } = req.body ?? {};
+    const trimmed = label ? String(label).trim().slice(0, 120) : null;
+    if (!trimmed) return res.status(400).json({ error: 'label required for a major version' });
+    await snapshotVersion(req.params.id, req.auth.user, { label: trimmed, isMajor: true });
+    res.status(201).json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+// Promote / relabel an existing version (typically: pin an
+// autosave snapshot as a major, or rename an existing major).
+designsRouter.patch('/:id/versions/:vid', rejectViewerWrites, async (req, res, next) => {
+  try {
+    const chk = await canAccess(req.params.id, req.auth.user);
+    if (chk.status !== 200) return res.status(chk.status).json({ error: 'not found' });
+    const body = req.body ?? {};
+    const labelProvided = Object.prototype.hasOwnProperty.call(body, 'label');
+    const majorProvided = Object.prototype.hasOwnProperty.call(body, 'isMajor');
+    if (!labelProvided && !majorProvided) {
+      return res.status(400).json({ error: 'nothing to update' });
+    }
+    const trimmed = labelProvided
+      ? (body.label ? String(body.label).trim().slice(0, 120) : null)
+      : null;
+    const { rows } = await pool.query(
+      `UPDATE design_versions
+         SET label    = CASE WHEN $3::boolean THEN $4 ELSE label END,
+             is_major = CASE WHEN $5::boolean THEN $6::boolean ELSE is_major END
+       WHERE id = $1 AND design_id = $2
+       RETURNING id, label, is_major`,
+      [req.params.vid, req.params.id, labelProvided, trimmed, majorProvided, majorProvided ? !!body.isMajor : false]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'version not found' });
+    res.json(rows[0]);
+  } catch (err) { next(err); }
+});
+
+// Delete a specific version. Used to remove an unwanted major —
+// autosaves roll themselves off so this is almost always a major.
+designsRouter.delete('/:id/versions/:vid', rejectViewerWrites, async (req, res, next) => {
+  try {
+    const chk = await canAccess(req.params.id, req.auth.user);
+    if (chk.status !== 200) return res.status(chk.status).json({ error: 'not found' });
+    const { rowCount } = await pool.query(
+      'DELETE FROM design_versions WHERE id = $1 AND design_id = $2',
+      [req.params.vid, req.params.id]
+    );
+    if (!rowCount) return res.status(404).json({ error: 'version not found' });
+    res.status(204).end();
   } catch (err) { next(err); }
 });
 

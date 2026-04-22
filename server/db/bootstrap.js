@@ -102,10 +102,15 @@ CREATE TABLE IF NOT EXISTS design_versions (
   description TEXT DEFAULT '',
   graph       JSONB NOT NULL,
   narrative   JSONB NOT NULL DEFAULT '{}'::jsonb,
+  label       TEXT,
+  is_major    BOOLEAN NOT NULL DEFAULT FALSE,
   created_by  INTEGER REFERENCES users(id) ON DELETE SET NULL,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+ALTER TABLE design_versions ADD COLUMN IF NOT EXISTS label TEXT;
+ALTER TABLE design_versions ADD COLUMN IF NOT EXISTS is_major BOOLEAN NOT NULL DEFAULT FALSE;
 CREATE INDEX IF NOT EXISTS design_versions_design_idx ON design_versions (design_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS design_versions_major_idx  ON design_versions (design_id, is_major);
 
 CREATE TABLE IF NOT EXISTS device_types (
   id               SERIAL PRIMARY KEY,

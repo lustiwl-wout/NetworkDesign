@@ -150,6 +150,7 @@ function Editor({ me }) {
   // defaults to null for a new blank editor.
   const [teamId, setTeamId] = useState(null);
   const [myTeams, setMyTeams] = useState([]);
+  const [versionsOpen, setVersionsOpen] = useState(false);
   const [selectedNode, setSelectedNode] = useState(null);
   const [selectedEdge, setSelectedEdge] = useState(null);
   const [toast, setToast] = useState(null);
@@ -834,6 +835,13 @@ function Editor({ me }) {
             </div>
           )}
         </div>
+        {canSave && currentId && (
+          <button
+            className="btn secondary"
+            onClick={() => setVersionsOpen(true)}
+            title="Autosaves roll over; major versions are kept."
+          >Versions</button>
+        )}
         <button className="btn secondary" onClick={() => setPresent(true)} title="Enter presentation mode (Esc to exit)">
           Present
         </button>
@@ -982,6 +990,119 @@ function Editor({ me }) {
           </InspectorPopup>
         )}
         {toast && <div className="toast">{toast}</div>}
+        {versionsOpen && currentId && (
+          <VersionsDialog
+            designId={currentId}
+            flash={flash}
+            onClose={() => setVersionsOpen(false)}
+            onRestore={async (vid) => {
+              const d = await api.restoreVersion(currentId, vid);
+              setName(d.name);
+              setNodes(d.graph?.nodes ?? []);
+              setEdges(styleEdges(d.graph?.edges ?? []));
+              lastSavedRef.current = {
+                nodes: JSON.parse(JSON.stringify(d.graph?.nodes ?? [])),
+                edges: JSON.parse(JSON.stringify(d.graph?.edges ?? [])),
+                name: d.name,
+                teamId: teamIdRef.current ?? null,
+              };
+              setVersionsOpen(false);
+              flash('Restored');
+            }}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function VersionsDialog({ designId, flash, onClose, onRestore }) {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState('');
+
+  const load = async () => {
+    setLoading(true);
+    try { setItems(await api.listVersions(designId)); setErr(''); }
+    catch (e) { setErr(e.message); }
+    finally { setLoading(false); }
+  };
+  useEffect(() => { load(); }, [designId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const saveMajor = async () => {
+    const label = prompt('Label this major version (e.g. "v1.0", "Before refactor"):');
+    if (!label || !label.trim()) return;
+    try { await api.saveMajorVersion(designId, label.trim()); await load(); flash('Major version saved'); }
+    catch (e) { setErr(e.message); }
+  };
+
+  const pin = async (v) => {
+    const label = prompt('Label for this major version:', v.label ?? '');
+    if (!label || !label.trim()) return;
+    try { await api.updateVersion(designId, v.id, { label: label.trim(), isMajor: true }); await load(); }
+    catch (e) { setErr(e.message); }
+  };
+
+  const unpin = async (v) => {
+    if (!confirm(`Remove major status from "${v.label}"? It may be pruned by future autosaves.`)) return;
+    try { await api.updateVersion(designId, v.id, { isMajor: false, label: null }); await load(); }
+    catch (e) { setErr(e.message); }
+  };
+
+  const remove = async (v) => {
+    if (!confirm(`Delete version ${v.label ? `"${v.label}"` : `#${v.id}`}?`)) return;
+    try { await api.deleteVersion(designId, v.id); await load(); }
+    catch (e) { setErr(e.message); }
+  };
+
+  const restore = async (v) => {
+    if (!confirm(`Restore to ${v.label ? `"${v.label}"` : 'this version'}? The current state will be kept as the most recent autosave.`)) return;
+    try { await onRestore(v.id); }
+    catch (e) { setErr(e.message); }
+  };
+
+  return (
+    <div className="modal-backdrop" onMouseDown={onClose}>
+      <div className="modal modal-wide" onMouseDown={(e) => e.stopPropagation()}>
+        <h2>Version history</h2>
+        <p className="hint">
+          Autosaves keep the most recent 50 snapshots and roll older
+          ones off. Major versions are pinned and never pruned — use
+          Save major version to mark a milestone.
+        </p>
+        <div className="form-actions" style={{ justifyContent: 'flex-start', margin: '8px 0 14px' }}>
+          <button className="btn" onClick={saveMajor}>Save major version…</button>
+        </div>
+        {err && <div className="admin-error">{err}</div>}
+        {loading ? <div className="hint">Loading…</div> : (
+          <ul className="version-list">
+            {items.length === 0 && <li className="hint">No versions yet.</li>}
+            {items.map((v) => (
+              <li key={v.id}>
+                <div>
+                  <strong>
+                    {v.is_major ? '★ ' : ''}
+                    {v.label || (v.is_major ? 'Major version' : 'Autosave')}
+                  </strong>
+                  <div className="meta">
+                    {new Date(v.created_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
+                    {v.created_by_email ? ` · ${v.created_by_email}` : ''}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button className="btn secondary small" onClick={() => restore(v)}>Restore</button>
+                  {v.is_major
+                    ? <button className="btn secondary small" onClick={() => unpin(v)}>Unpin</button>
+                    : <button className="btn secondary small" onClick={() => pin(v)}>Pin as major</button>}
+                  <button className="btn danger small" onClick={() => remove(v)}>Del</button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className="form-actions">
+          <button className="btn secondary" onClick={onClose}>Close</button>
+        </div>
       </div>
     </div>
   );
