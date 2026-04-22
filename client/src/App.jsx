@@ -144,8 +144,6 @@ function Editor({ me }) {
   const [exportTransparent, setExportTransparent] = useState(false);
   const [phaseFilter, setPhaseFilter] = useState(null); // null = show all
   const [view, setView] = useState(me?.defaultView ?? 'management'); // 'management' | 'engineering'
-  const [historyOpen, setHistoryOpen] = useState(false);
-  const [versions, setVersions] = useState([]);
   const [allDesigns, setAllDesigns] = useState([]);
   const wrapperRef = useRef(null);
   const { screenToFlowPosition } = useReactFlow();
@@ -393,44 +391,6 @@ function Editor({ me }) {
     } catch (e) { flash(`Save failed: ${e.message}`); }
   };
 
-  // Save the current canvas as a brand-new design, keeping the
-  // current working copy pointed at the duplicate (so further Save
-  // operations land on the copy, not the original).
-  const duplicateDesign = async () => {
-    if (!canSave) {
-      flash('Demo mode — Duplicate is disabled.');
-      return;
-    }
-    const suggested = `Copy of ${name}`.slice(0, 120);
-    const newName = prompt('Name for the duplicate?', suggested);
-    if (!newName) return;
-    try {
-      const d = await api.create({ name: newName.trim(), graph: { nodes, edges } });
-      setCurrentId(d.id);
-      setName(d.name);
-      flash(`Created "${d.name}"`);
-    } catch (e) { flash(`Duplicate failed: ${e.message}`); }
-  };
-
-  const loadVersions = useCallback(async () => {
-    if (!currentId) { setVersions([]); return; }
-    try { setVersions(await api.versions(currentId)); }
-    catch (e) { flash(`History: ${e.message}`); }
-  }, [currentId]);
-
-  const restoreVersion = async (vid) => {
-    if (!currentId) return;
-    if (!confirm('Restore this version? Current unsaved changes will be lost.')) return;
-    try {
-      const d = await api.restoreVersion(currentId, vid);
-      setName(d.name);
-      setNodes(d.graph?.nodes ?? []);
-      setEdges(styleEdges(d.graph?.edges ?? []));
-      setHistoryOpen(false);
-      flash('Restored');
-    } catch (e) { flash(`Restore failed: ${e.message}`); }
-  };
-
   const deleteDesign = async () => {
     if (!currentId) return;
     if (!confirm(`Delete "${name}"?`)) return;
@@ -491,30 +451,56 @@ function Editor({ me }) {
   // the selection. We store a deep copy so later mutations don't
   // bleed into the clipboard.
   const copySelection = useCallback(() => {
-    const selNodes = nodesRef.current.filter((n) => n.selected);
-    if (!selNodes.length) return;
-    const ids = new Set(selNodes.map((n) => n.id));
-    const selEdges = edgesRef.current.filter((e) => ids.has(e.source) && ids.has(e.target));
-    clipboardRef.current = JSON.parse(JSON.stringify({ nodes: selNodes, edges: selEdges }));
-    flash(`Copied ${selNodes.length} node${selNodes.length === 1 ? '' : 's'}`);
+    const all = nodesRef.current;
+    const seeds = new Set(all.filter((n) => n.selected).map((n) => n.id));
+    if (!seeds.size) return;
+    // If a zone is selected, implicitly copy everything inside it —
+    // transitively, since zones can (in theory) nest. Edges whose
+    // endpoints are both in the expanded set come along too.
+    const ids = new Set(seeds);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const n of all) {
+        if (ids.has(n.id)) continue;
+        if (n.parentNode && ids.has(n.parentNode)) {
+          ids.add(n.id);
+          changed = true;
+        }
+      }
+    }
+    const copyNodes = all.filter((n) => ids.has(n.id));
+    const copyEdges = edgesRef.current.filter((e) => ids.has(e.source) && ids.has(e.target));
+    clipboardRef.current = JSON.parse(JSON.stringify({ nodes: copyNodes, edges: copyEdges }));
+    const extra = copyNodes.length - seeds.size;
+    flash(
+      extra > 0
+        ? `Copied ${seeds.size} + ${extra} contained`
+        : `Copied ${copyNodes.length} node${copyNodes.length === 1 ? '' : 's'}`
+    );
   }, []);
 
   const pasteClipboard = useCallback(() => {
     const clip = clipboardRef.current;
     if (!clip || !clip.nodes.length) return;
     takeSnapshot();
-    // Fresh IDs; keep internal edge connections wired up via a map.
+    // Allocate new IDs in one pass so parentNode lookups work
+    // regardless of iteration order in clip.nodes.
     const idMap = new Map();
+    for (const n of clip.nodes) idMap.set(n.id, nextId());
     const pastedNodes = clip.nodes.map((n) => {
-      const newId = nextId();
-      idMap.set(n.id, newId);
+      const hasCopiedParent = !!(n.parentNode && idMap.has(n.parentNode));
       return {
         ...n,
-        id: newId,
+        id: idMap.get(n.id),
         selected: true,
-        position: { x: n.position.x + 24, y: n.position.y + 24 },
-        // Drop the parentNode link unless the parent was also copied.
-        parentNode: n.parentNode && idMap.has(n.parentNode) ? idMap.get(n.parentNode) : undefined,
+        // Only top-level pasted nodes get the "drop offset" — children
+        // of a copied zone keep their relative-to-parent position so
+        // the group holds together.
+        position: hasCopiedParent
+          ? { ...n.position }
+          : { x: n.position.x + 24, y: n.position.y + 24 },
+        parentNode: hasCopiedParent ? idMap.get(n.parentNode) : undefined,
       };
     });
     const pastedEdges = clip.edges.map((e) => ({
@@ -655,11 +641,6 @@ function Editor({ me }) {
         )}
         <button className="btn secondary" onClick={newDesign}>New</button>
         <a className="btn secondary" href="/designs">Designs</a>
-        {canSave && currentId && (
-          <button className="btn secondary" onClick={() => { setHistoryOpen(true); loadVersions(); }} title="Version history">
-            History
-          </button>
-        )}
         <div className="menu">
           <button className="btn secondary" onClick={() => setExportOpen((v) => !v)}>
             Export PNG ▾
@@ -704,11 +685,6 @@ function Editor({ me }) {
           ▶ Present
         </button>
         {canSave && <button className="btn" onClick={saveDesign}>Save</button>}
-        {canSave && currentId && (
-          <button className="btn secondary" onClick={duplicateDesign} title="Save this design as a new one">
-            Duplicate
-          </button>
-        )}
         {canSave && currentId && (
           <button className="btn danger" onClick={deleteDesign}>Delete</button>
         )}
@@ -854,44 +830,8 @@ function Editor({ me }) {
             )}
           </InspectorPopup>
         )}
-        {historyOpen && (
-          <HistoryPanel
-            versions={versions}
-            onRestore={restoreVersion}
-            onClose={() => setHistoryOpen(false)}
-          />
-        )}
         {toast && <div className="toast">{toast}</div>}
       </div>
-    </div>
-  );
-}
-
-function HistoryPanel({ versions, onRestore, onClose }) {
-  return (
-    <div className="side-panel" onMouseDown={(e) => e.stopPropagation()}>
-      <header>
-        <h2>Version history</h2>
-        <button className="inspector-close" onClick={onClose}>×</button>
-      </header>
-      {versions.length === 0 && <p className="hint">No snapshots yet. Save the design to start a history.</p>}
-      <ul className="version-list">
-        {versions.map((v) => (
-          <li key={v.id}>
-            <div>
-              <strong>{v.name}</strong>
-              <div className="meta">
-                {new Date(v.created_at).toLocaleString(undefined, {
-                  dateStyle: 'medium', timeStyle: 'short',
-                })}
-                {v.created_by_email ? ` · ${v.created_by_email}` : ''}
-              </div>
-            </div>
-            <button className="btn secondary small" onClick={() => onRestore(v.id)}>Restore</button>
-          </li>
-        ))}
-      </ul>
-      <p className="hint small">A new snapshot is captured on every Save. Oldest are pruned past 50.</p>
     </div>
   );
 }

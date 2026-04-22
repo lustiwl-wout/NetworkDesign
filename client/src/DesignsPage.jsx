@@ -23,6 +23,24 @@ export default function DesignsPage({ me }) {
     catch (e) { setErr(e.message); }
   };
 
+  // Duplicate fetches the full design (graph + metadata) then creates
+  // a new one with a "Copy of …" name. The new design shows up in
+  // the list immediately via reload.
+  const duplicate = async (id, name) => {
+    const suggested = `Copy of ${name}`.slice(0, 120);
+    const newName = prompt('Name for the duplicate?', suggested);
+    if (!newName) return;
+    try {
+      const full = await api.get(id);
+      await api.create({
+        name: newName.trim(),
+        description: full.description ?? '',
+        graph: full.graph ?? { nodes: [], edges: [] },
+      });
+      await load();
+    } catch (e) { setErr(`Duplicate failed: ${e.message}`); }
+  };
+
   const filtered = items.filter((d) =>
     !query || d.name.toLowerCase().includes(query.toLowerCase())
   );
@@ -80,6 +98,10 @@ export default function DesignsPage({ me }) {
                 </span>
                 <div className="actions">
                   <a className="btn" href={`/?design=${d.id}`}>Open</a>
+                  <button
+                    className="btn secondary small"
+                    onClick={() => duplicate(d.id, d.name)}
+                  >Duplicate</button>
                   <button
                     className="btn danger small"
                     onClick={() => remove(d.id, d.name)}
