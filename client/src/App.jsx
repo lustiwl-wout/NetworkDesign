@@ -54,6 +54,16 @@ function findContainingZone(nodes, pos) {
   return null;
 }
 
+// Lightweight deep-ish equality for the autosave dirty-check. The
+// graph objects are plain data + primitives, so JSON round-trip is
+// cheap compared to how often this fires (debounced) and much
+// simpler than a hand-rolled walker.
+function shallowEqualGraph(a, b) {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
 function styleEdges(edges) {
   return edges.map((e) => {
     const kind = e.data?.kind ?? 'network';
@@ -186,14 +196,28 @@ function Editor({ me }) {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const designId = params.get('design');
-    if (!designId) return;
+    if (!designId) {
+      // Fresh editor with an empty untitled design — mark it as
+      // "saved" so autosave doesn't try to PUT an empty state before
+      // the user has done anything.
+      lastSavedRef.current = { nodes: [], edges: [], name: 'Untitled design' };
+      return;
+    }
     (async () => {
       try {
         const d = await api.get(designId);
         setCurrentId(d.id);
         setName(d.name);
-        setNodes(d.graph?.nodes ?? []);
-        setEdges(styleEdges(d.graph?.edges ?? []));
+        const loadedNodes = d.graph?.nodes ?? [];
+        const loadedEdges = styleEdges(d.graph?.edges ?? []);
+        setNodes(loadedNodes);
+        setEdges(loadedEdges);
+        lastSavedRef.current = {
+          nodes: JSON.parse(JSON.stringify(loadedNodes)),
+          edges: JSON.parse(JSON.stringify(loadedEdges)),
+          name: d.name,
+        };
+        setSaveState('saved');
       } catch (e) {
         console.error('Failed to auto-load design:', e);
       }
@@ -380,6 +404,8 @@ function Editor({ me }) {
     setName('Untitled design');
     setNodes([]);
     setEdges([]);
+    lastSavedRef.current = { nodes: [], edges: [], name: 'Untitled design' };
+    setSaveState('idle');
     setSelectedNode(null);
     setSelectedEdge(null);
   };
@@ -395,23 +421,91 @@ function Editor({ me }) {
     } catch (e) { flash(`Load failed: ${e.message}`); }
   };
 
-  const saveDesign = async () => {
-    if (!canSave) {
-      flash('Demo mode — Save is disabled. Use Export PNG.');
-      return;
-    }
-    const graph = { nodes, edges };
+  // Autosave. Every edit schedules a silent save 1.5 s later; the
+  // timer resets on every change so rapid edits coalesce into one
+  // network call. A `saveState` drives the status chip in the
+  // topbar so the user always knows where they stand.
+  const [saveState, setSaveState] = useState('idle'); // 'idle' | 'dirty' | 'saving' | 'saved' | 'error'
+  const lastSavedRef = useRef(null);
+  const saveTimerRef = useRef(null);
+  const nameRef = useRef(name);
+  nameRef.current = name;
+  const currentIdRef = useRef(currentId);
+  currentIdRef.current = currentId;
+
+  // Compare current content to the last-saved snapshot. Cheap enough
+  // for small diagrams; uses the refs so we read the latest values.
+  const isDirty = useCallback(() => {
+    const snap = lastSavedRef.current;
+    if (!snap) return true;
+    return snap.name !== nameRef.current
+      || !shallowEqualGraph(snap.nodes, nodesRef.current)
+      || !shallowEqualGraph(snap.edges, edgesRef.current);
+  }, []);
+
+  const doSave = useCallback(async () => {
+    if (!canSave) return;
+    if (!isDirty()) return;
+    const graph = { nodes: nodesRef.current, edges: edgesRef.current };
+    const nm = nameRef.current;
+    setSaveState('saving');
     try {
-      if (currentId) {
-        const d = await api.update(currentId, { name, graph });
-        flash(`Saved "${d.name}"`);
+      let d;
+      if (currentIdRef.current) {
+        d = await api.update(currentIdRef.current, { name: nm, graph });
       } else {
-        const d = await api.create({ name, graph });
+        d = await api.create({ name: nm, graph });
         setCurrentId(d.id);
-        flash(`Created "${d.name}"`);
       }
-    } catch (e) { flash(`Save failed: ${e.message}`); }
-  };
+      lastSavedRef.current = {
+        nodes: JSON.parse(JSON.stringify(nodesRef.current)),
+        edges: JSON.parse(JSON.stringify(edgesRef.current)),
+        name: nm,
+      };
+      setSaveState('saved');
+    } catch (e) {
+      setSaveState('error');
+      flash(`Autosave failed: ${e.message}`);
+    }
+  }, [canSave, isDirty]);
+
+  // Schedule a debounced save whenever content changes.
+  useEffect(() => {
+    if (!canSave) return;
+    if (lastSavedRef.current === null) return; // waiting for initial load
+    if (!isDirty()) return;
+    setSaveState('dirty');
+    clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => { doSave(); }, 1500);
+    return () => clearTimeout(saveTimerRef.current);
+  }, [nodes, edges, name, canSave, doSave, isDirty]);
+
+  // Save on tab close / navigation / reload. `keepalive: true` lets
+  // the request complete after the page is unloading.
+  useEffect(() => {
+    if (!canSave) return;
+    const onHide = () => {
+      if (!isDirty()) return;
+      const body = JSON.stringify({
+        name: nameRef.current,
+        graph: { nodes: nodesRef.current, edges: edgesRef.current },
+      });
+      const id = currentIdRef.current;
+      const url = id ? `/api/designs/${id}` : '/api/designs';
+      const method = id ? 'PUT' : 'POST';
+      try {
+        fetch(url, {
+          method,
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body,
+          keepalive: true,
+        });
+      } catch {}
+    };
+    window.addEventListener('pagehide', onHide);
+    return () => window.removeEventListener('pagehide', onHide);
+  }, [canSave, isDirty]);
 
   const deleteDesign = async () => {
     if (!currentId) return;
@@ -706,7 +800,7 @@ function Editor({ me }) {
         <button className="btn secondary" onClick={() => setPresent(true)} title="Enter presentation mode (Esc to exit)">
           ▶ Present
         </button>
-        {canSave && <button className="btn" onClick={saveDesign}>Save</button>}
+        {canSave && <SaveStatus state={saveState} />}
         {canSave && currentId && (
           <button className="btn danger" onClick={deleteDesign}>Delete</button>
         )}
@@ -1197,6 +1291,18 @@ function EdgeInspector({ edge, view = 'management', edgeKinds = [], onChange, on
       <button className="btn danger" onClick={onDelete}>Delete connection</button>
     </>
   );
+}
+
+function SaveStatus({ state }) {
+  const map = {
+    idle:   { label: 'Autosave',          cls: 'save-status muted' },
+    dirty:  { label: 'Unsaved…',          cls: 'save-status dirty' },
+    saving: { label: 'Saving…',           cls: 'save-status saving' },
+    saved:  { label: 'Saved',             cls: 'save-status saved' },
+    error:  { label: 'Save failed',       cls: 'save-status error' },
+  };
+  const m = map[state] ?? map.idle;
+  return <span className={m.cls} title="Changes save automatically">{m.label}</span>;
 }
 
 const THEMES = ['dark', 'light', 'professional'];

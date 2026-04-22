@@ -35,26 +35,28 @@ html.theme-light {
   --grid: #d1d9e6;
 }
 
-/* Professional — conservative palette intended for print, slides,
-   and board-room screens. Paper-white canvas, deep navy accent,
-   muted neutrals, no bright highlights. */
+/* Professional — enterprise look & feel. Deliberately different
+   from Light: a muted neutral grey canvas, crisp white panels, no
+   cyan pop — every accent is a conservative corporate navy. Aims
+   to match the visual register of tools like IBM Carbon or
+   enterprise SaaS dashboards. */
 html.theme-professional {
-  --bg: #eceef2;
+  --bg: #dde2ea;
   --panel: #ffffff;
-  --panel-2: #f3f5f9;
-  --border: #c8d0de;
-  --text: #1f2937;
-  --muted: #64748b;
-  --accent: #1e3a5f;
-  --accent-2: #162a47;
-  --danger: #b91c1c;
-  --risk-h: #b91c1c;
-  --risk-m: #b45309;
-  --risk-l: #15803d;
+  --panel-2: #eef1f6;
+  --border: #b4bdcb;
+  --text: #1a2333;
+  --muted: #5a6679;
+  --accent: #003a70;
+  --accent-2: #002752;
+  --danger: #8b1e23;
+  --risk-h: #8b1e23;
+  --risk-m: #8e5a0b;
+  --risk-l: #286238;
 
   --node-bg: #ffffff;
   --floating-bg: rgba(255, 255, 255, 0.97);
-  --grid: #d9dfe8;
+  --grid: #c4ccd9;
 }
 
 * { box-sizing: border-box; }
@@ -211,6 +213,27 @@ html, body, #root {
   font-size: 15px;
   line-height: 1;
 }
+
+/* Autosave status chip — sits where the old Save button did. */
+.save-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  min-width: 78px;
+  justify-content: center;
+  white-space: nowrap;
+}
+.save-status.dirty  { color: var(--accent); border-color: var(--accent); }
+.save-status.saving { color: var(--accent); border-color: var(--accent); opacity: 0.75; }
+.save-status.saved  { color: var(--risk-l); border-color: var(--risk-l); }
+.save-status.error  { color: var(--danger); border-color: var(--danger); }
 
 .view-switch {
   display: inline-flex;
