@@ -1,5 +1,10 @@
 const DARK = '#0f172a';
-const LIGHT = '#f1f5f9';
+// Icon stroke / detail colour. Overridable per theme via the
+// --icon-line CSS custom property — near-white on Dark + Light
+// (which render icons on an accent-tinted wash), but swapped to
+// near-black in the Professional theme so the details stay
+// visible on flat white nodes.
+const LIGHT = 'var(--icon-line, #f1f5f9)';
 
 function Router({ accent }) {
   return (

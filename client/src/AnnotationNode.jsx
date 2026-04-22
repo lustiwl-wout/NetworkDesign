@@ -16,7 +16,7 @@ export default function AnnotationNode({ data, selected }) {
         borderColor: color,
         borderStyle,
         background: `${color}14`,
-        color: '#f1f5f9',
+        color: 'var(--annotation-body, #f1f5f9)',
       }}
     >
       <NodeResizer

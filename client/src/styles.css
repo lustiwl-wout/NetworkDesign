@@ -57,6 +57,10 @@ html.theme-professional {
   --node-bg: #ffffff;
   --floating-bg: rgba(255, 255, 255, 0.98);
   --grid: #edf0f4;
+  /* Documentation look: icon details & annotation text read dark on
+     white, not the near-white used in Dark/Light. */
+  --icon-line: #1f2937;
+  --annotation-body: #1f2937;
 }
 
 html.theme-professional .net-node {
