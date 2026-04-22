@@ -5,19 +5,19 @@ import { EditorCtx } from './EditorCtx.js';
 // Custom orthogonal edge.
 //
 // Routing: the line exits each node perpendicular to the anchor side
-// (via a short stub), passes through any user-placed waypoints in
+// via a short stub, passes through any user-placed waypoints in
 // order, and enters the target perpendicular to its anchor side.
-// Between consecutive stops we use at most one 90° elbow, so the
-// shape always stays simple and predictable. There's no automatic
-// obstacle avoidance — if the line crosses something you don't
-// want it to, drop a waypoint and the user stays fully in control.
+// Between consecutive stops we use at most one 90° elbow — no A*,
+// no obstacle avoidance; if the line crosses something you don't
+// want, grab the line and drag a waypoint out.
 //
-// Two kinds of handles appear on every edge:
-//   * A small open square at the midpoint of each leg. Dragging
-//     one creates a new waypoint at that spot and lets you shape
-//     the leg into two.
-//   * A filled square at every existing waypoint. Drag to move it,
-//     double-click to remove it.
+// Controls:
+//   * Grab the line and drag it to create a new bend exactly where
+//     you clicked. The waypoint follows your cursor until release.
+//   * Small filled square on every existing waypoint: drag to move
+//     it, double-click to delete it.
+//   * Waypoints that sit on the straight line between their
+//     neighbours are auto-removed on drop — no ghost handles.
 
 const STUB = 30;
 const GRID = 10;
@@ -29,7 +29,7 @@ export default function SmartEdge(props) {
     id, source, target,
     sourceHandleId, targetHandleId,
     sourceHandle, targetHandle,
-    style = {}, markerEnd, label, animated, selected,
+    style = {}, markerEnd, label, animated,
   } = props;
   const srcHandle = sourceHandleId ?? sourceHandle ?? null;
   const tgtHandle = targetHandleId ?? targetHandle ?? null;
@@ -49,27 +49,23 @@ export default function SmartEdge(props) {
   const ts = stubOut(ta);
 
   const waypoints = (props.data?.waypoints ?? []).map((p) => ({
-    x: Math.round(p.x / GRID) * GRID,
-    y: Math.round(p.y / GRID) * GRID,
+    x: snap(p.x),
+    y: snap(p.y),
   }));
 
   // Build each leg between consecutive stops. Stops are
-  // [ss, wp0, wp1, ..., wpN-1, ts] — so leg i is the route between
-  // stops[i] and stops[i+1]. Stubs enter/leave on a fixed axis, and
-  // each leg carries that axis forward so we never double-back.
+  // [ss, wp0, ..., wpN-1, ts]; leg i routes stops[i] → stops[i+1].
   const stops = [ss, ...waypoints, ts];
   const legs = [];
   let axis = axisOfSide(sa.side);
   for (let i = 0; i < stops.length - 1; i++) {
     const forceExit = i === stops.length - 2 ? axisOfSide(ta.side) : null;
-    const { points: legPoints, exitAxis } = orthogonalLeg(
-      stops[i], stops[i + 1], axis, forceExit
-    );
-    legs.push(legPoints);
+    const { points, exitAxis } = orthogonalLeg(stops[i], stops[i + 1], axis, forceExit);
+    legs.push(points);
     axis = exitAxis;
   }
 
-  // Concatenate legs into one polyline (don't duplicate shared stops).
+  // Flatten into the full polyline (sa + ss-leg + ... + ts-leg + ta).
   const full = [sa];
   full.push(...legs[0]);
   for (let i = 1; i < legs.length; i++) full.push(...legs[i].slice(1));
@@ -78,10 +74,11 @@ export default function SmartEdge(props) {
   const d = polyline(pathPoints);
 
   const centre = pathPoints[Math.floor(pathPoints.length / 2)];
-  const totalLen = polylineLength(pathPoints);
 
   return (
     <>
+      {/* The visible stroke. Pointer events on this path become the
+          line-drag affordance (handled by LineDragTarget below). */}
       <path
         id={id}
         d={d}
@@ -89,9 +86,11 @@ export default function SmartEdge(props) {
         strokeLinejoin="miter"
         strokeLinecap="butt"
         className={`react-flow__edge-path${animated ? ' animated' : ''}`}
-        style={{ ...style, pointerEvents: 'stroke' }}
+        style={{ ...style, pointerEvents: 'none' }}
         markerEnd={markerEnd}
       />
+      {/* Wide invisible stroke: real hit target for drag / click. */}
+      <LineDragTarget edgeId={id} d={d} waypoints={waypoints} legs={legs} />
       {label && (
         <EdgeLabelRenderer>
           <div
@@ -102,76 +101,95 @@ export default function SmartEdge(props) {
           </div>
         </EdgeLabelRenderer>
       )}
-      {selected && (
-        <EdgeLabelRenderer>
-          <div
-            className="edge-size-chip"
-            style={{ transform: `translate(-50%, -50%) translate(${centre.x}px, ${centre.y + 16}px)` }}
-          >
-            {Math.round(totalLen)} px
-          </div>
-        </EdgeLabelRenderer>
-      )}
       <EdgeLabelRenderer>
-        {legs.map((legPts, i) => {
-          if (arcLength(legPts) < 60) return null;
-          const mid = arcMidpoint(legPts);
-          return (
-            <LegHandle
-              key={`leg-${i}`}
-              edgeId={id}
-              legIndex={i}
-              mid={mid}
-              horizontal={mid.horizontal}
-            />
-          );
-        })}
         {waypoints.map((wp, i) => (
-          <WaypointMoveHandle
-            key={`wp-${i}`}
-            edgeId={id}
-            wpIndex={i}
-            pos={wp}
-          />
+          <WaypointMoveHandle key={`wp-${i}`} edgeId={id} wpIndex={i} pos={wp} />
         ))}
       </EdgeLabelRenderer>
     </>
   );
 }
 
-// ---- Handles ----
+// ---- Line drag: grab the stroke anywhere and pull out a waypoint ----
 
-// Shared drag setup for a handle that uses native pointer events and
-// pointer capture so the cursor doesn't need to stay on the handle
-// during the drag.
-function useHandleDrag(ref, onDrag) {
-  const onDragRef = useRef(onDrag);
-  onDragRef.current = onDrag;
+// Invisible wide-stroke path that absorbs pointerdown on the line.
+// Until the pointer actually moves, we don't touch state (that lets
+// React Flow still select the edge on a plain click). On the first
+// move, we work out which leg was grabbed, splice a waypoint there,
+// and track it. On release we collapse it if it's collinear with its
+// neighbours so no ghost dots are left behind.
+function LineDragTarget({ edgeId, d, waypoints, legs }) {
+  const ref = useRef(null);
+  const { screenToFlowPosition } = useReactFlow();
+  const { setEdges } = useContext(EditorCtx);
+  const state = useRef({ edgeId, waypoints, legs, setEdges, screenToFlowPosition });
+  state.current = { edgeId, waypoints, legs, setEdges, screenToFlowPosition };
 
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
     let activePointer = null;
-    let firstMove = true;
+    let downFlow = null;   // flow-space pointer position at pointerdown
+    let ownedIdx = null;   // index of the waypoint we've inserted
+    let insertLegIdx = null;
 
     const onDown = (e) => {
       if (e.button !== undefined && e.button !== 0) return;
+      const s = state.current;
+      const pt = s.screenToFlowPosition({ x: e.clientX, y: e.clientY });
+      if (!pt || !Number.isFinite(pt.x) || !Number.isFinite(pt.y)) return;
       e.preventDefault();
       e.stopPropagation();
       activePointer = e.pointerId;
-      firstMove = true;
+      downFlow = { x: snap(pt.x), y: snap(pt.y) };
+      ownedIdx = null;
+      insertLegIdx = closestLegIndex(downFlow, s.legs);
       try { el.setPointerCapture(e.pointerId); } catch {}
     };
+
     const onMove = (e) => {
       if (activePointer == null || e.pointerId !== activePointer) return;
       e.preventDefault();
-      onDragRef.current?.(e.clientX, e.clientY, firstMove);
-      firstMove = false;
+      const s = state.current;
+      const pt = s.screenToFlowPosition({ x: e.clientX, y: e.clientY });
+      if (!pt || !Number.isFinite(pt.x) || !Number.isFinite(pt.y)) return;
+      const newPt = { x: snap(pt.x), y: snap(pt.y) };
+      // Wait for a real drag (> a few px) so a plain click doesn't
+      // insert a phantom waypoint.
+      if (ownedIdx === null) {
+        const dx = Math.abs(newPt.x - (downFlow?.x ?? newPt.x));
+        const dy = Math.abs(newPt.y - (downFlow?.y ?? newPt.y));
+        if (dx + dy < GRID) return;
+      }
+      s.setEdges((eds) => eds.map((ed) => {
+        if (ed.id !== s.edgeId) return ed;
+        const wps = [...(ed.data?.waypoints ?? [])];
+        if (ownedIdx === null) {
+          const at = Math.max(0, Math.min(insertLegIdx ?? wps.length, wps.length));
+          wps.splice(at, 0, newPt);
+          ownedIdx = at;
+        } else {
+          wps[ownedIdx] = newPt;
+        }
+        return { ...ed, data: { ...(ed.data ?? {}), waypoints: wps } };
+      }));
     };
+
     const onUp = () => {
       if (activePointer == null) return;
       try { el.releasePointerCapture(activePointer); } catch {}
       activePointer = null;
+      downFlow = null;
+      const movedIdx = ownedIdx;
+      ownedIdx = null;
+      insertLegIdx = null;
+      if (movedIdx == null) return;
+      // Drag ended — compact redundant waypoints.
+      state.current.setEdges((eds) => eds.map((ed) => {
+        if (ed.id !== state.current.edgeId) return ed;
+        const wps = compactWaypoints(ed.data?.waypoints ?? []);
+        return { ...ed, data: { ...(ed.data ?? {}), waypoints: wps } };
+      }));
     };
 
     el.addEventListener('pointerdown', onDown);
@@ -186,58 +204,70 @@ function useHandleDrag(ref, onDrag) {
       el.removeEventListener('pointercancel', onUp);
       el.removeEventListener('lostpointercapture', onUp);
     };
-  }, [ref]);
-}
-
-// One open square per leg. Dragging it creates a new waypoint at
-// legIndex in the edge's waypoints array, then repositions it as the
-// pointer moves.
-function LegHandle({ edgeId, legIndex, mid, horizontal }) {
-  const ref = useRef(null);
-  const { screenToFlowPosition } = useReactFlow();
-  const { setEdges } = useContext(EditorCtx);
-  const state = useRef({ edgeId, legIndex, setEdges, screenToFlowPosition });
-  state.current = { edgeId, legIndex, setEdges, screenToFlowPosition };
-  const createdIdxRef = useRef(null);
-
-  useHandleDrag(ref, (cx, cy, firstMove) => {
-    const { edgeId: eid, legIndex: li, setEdges: se, screenToFlowPosition: s2f } = state.current;
-    const pt = s2f({ x: cx, y: cy });
-    if (!pt || !Number.isFinite(pt.x) || !Number.isFinite(pt.y)) return;
-    const newPt = { x: snap(pt.x), y: snap(pt.y) };
-    if (firstMove) createdIdxRef.current = null;
-    se((eds) => eds.map((ed) => {
-      if (ed.id !== eid) return ed;
-      const wps = [...(ed.data?.waypoints ?? [])];
-      if (createdIdxRef.current === null) {
-        // Insert a fresh waypoint at legIndex (leg i lies between
-        // stops[i] and stops[i+1]; in the waypoints array that slot
-        // is `i`, so splice at i inserts between the two stops).
-        const at = Math.max(0, Math.min(li, wps.length));
-        wps.splice(at, 0, newPt);
-        createdIdxRef.current = at;
-      } else {
-        wps[createdIdxRef.current] = newPt;
-      }
-      return { ...ed, data: { ...(ed.data ?? {}), waypoints: wps } };
-    }));
-  });
+  }, []);
 
   return (
-    <div
+    <path
       ref={ref}
-      className={`edge-waypoint nodrag nopan ${horizontal ? 'h' : 'v'}`}
-      style={{
-        transform: `translate(-50%, -50%) translate(${mid.x}px, ${mid.y}px)`,
-        touchAction: 'none',
-      }}
-      title="Drag to bend the line"
+      d={d}
+      fill="none"
+      stroke="transparent"
+      strokeWidth="18"
+      className="nopan nodrag"
+      style={{ pointerEvents: 'stroke', cursor: 'grab', touchAction: 'none' }}
     />
   );
 }
 
-// Filled square at an existing waypoint. Drag to reposition it,
-// double-click to remove it.
+// Find the leg whose path is closest to point `p`. Returns the leg
+// index in 0..legs.length-1. Used to decide where a new waypoint
+// should be inserted when the user grabs the line.
+function closestLegIndex(p, legs) {
+  let bestI = 0;
+  let bestD = Infinity;
+  for (let i = 0; i < legs.length; i++) {
+    const leg = legs[i];
+    for (let j = 1; j < leg.length; j++) {
+      const d = distToSegment(p, leg[j - 1], leg[j]);
+      if (d < bestD) { bestD = d; bestI = i; }
+    }
+  }
+  return bestI;
+}
+
+// Manhattan distance from p to the axis-aligned segment a→b.
+function distToSegment(p, a, b) {
+  if (a.x === b.x) {
+    const y = Math.max(Math.min(a.y, b.y), Math.min(p.y, Math.max(a.y, b.y)));
+    return Math.abs(p.x - a.x) + Math.abs(p.y - y);
+  }
+  const x = Math.max(Math.min(a.x, b.x), Math.min(p.x, Math.max(a.x, b.x)));
+  return Math.abs(p.y - a.y) + Math.abs(p.x - x);
+}
+
+// Remove waypoints that are collinear with / on the straight-line
+// segment between their immediate neighbours. Keeps the data clean
+// so no orphan handles accumulate.
+function compactWaypoints(wps) {
+  if (wps.length === 0) return wps;
+  let changed = true;
+  let cur = [...wps];
+  while (changed) {
+    changed = false;
+    for (let i = 0; i < cur.length; i++) {
+      const prev = cur[i - 1] ?? null;
+      const next = cur[i + 1] ?? null;
+      if (!prev || !next) continue;
+      // Redundant if on the axis-aligned straight between neighbours.
+      if (prev.x === next.x && cur[i].x === prev.x) { cur.splice(i, 1); changed = true; break; }
+      if (prev.y === next.y && cur[i].y === prev.y) { cur.splice(i, 1); changed = true; break; }
+    }
+  }
+  return cur;
+}
+
+// ---- Waypoint move handle ----
+
 function WaypointMoveHandle({ edgeId, wpIndex, pos }) {
   const ref = useRef(null);
   const { screenToFlowPosition } = useReactFlow();
@@ -245,25 +275,66 @@ function WaypointMoveHandle({ edgeId, wpIndex, pos }) {
   const state = useRef({ edgeId, wpIndex, setEdges, screenToFlowPosition });
   state.current = { edgeId, wpIndex, setEdges, screenToFlowPosition };
 
-  useHandleDrag(ref, (cx, cy) => {
-    const { edgeId: eid, wpIndex: i, setEdges: se, screenToFlowPosition: s2f } = state.current;
-    const pt = s2f({ x: cx, y: cy });
-    if (!pt || !Number.isFinite(pt.x) || !Number.isFinite(pt.y)) return;
-    const newPt = { x: snap(pt.x), y: snap(pt.y) };
-    se((eds) => eds.map((ed) => {
-      if (ed.id !== eid) return ed;
-      const wps = [...(ed.data?.waypoints ?? [])];
-      if (i >= 0 && i < wps.length) wps[i] = newPt;
-      return { ...ed, data: { ...(ed.data ?? {}), waypoints: wps } };
-    }));
-  });
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    let activePointer = null;
+
+    const onDown = (e) => {
+      if (e.button !== undefined && e.button !== 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      activePointer = e.pointerId;
+      try { el.setPointerCapture(e.pointerId); } catch {}
+    };
+    const onMove = (e) => {
+      if (activePointer == null || e.pointerId !== activePointer) return;
+      e.preventDefault();
+      const s = state.current;
+      const pt = s.screenToFlowPosition({ x: e.clientX, y: e.clientY });
+      if (!pt || !Number.isFinite(pt.x) || !Number.isFinite(pt.y)) return;
+      const newPt = { x: snap(pt.x), y: snap(pt.y) };
+      s.setEdges((eds) => eds.map((ed) => {
+        if (ed.id !== s.edgeId) return ed;
+        const wps = [...(ed.data?.waypoints ?? [])];
+        if (s.wpIndex >= 0 && s.wpIndex < wps.length) wps[s.wpIndex] = newPt;
+        return { ...ed, data: { ...(ed.data ?? {}), waypoints: wps } };
+      }));
+    };
+    const onUp = () => {
+      if (activePointer == null) return;
+      try { el.releasePointerCapture(activePointer); } catch {}
+      activePointer = null;
+      // Compact on release so dropping one waypoint onto its
+      // neighbour's line collapses it.
+      const s = state.current;
+      s.setEdges((eds) => eds.map((ed) => {
+        if (ed.id !== s.edgeId) return ed;
+        const wps = compactWaypoints(ed.data?.waypoints ?? []);
+        return { ...ed, data: { ...(ed.data ?? {}), waypoints: wps } };
+      }));
+    };
+
+    el.addEventListener('pointerdown', onDown);
+    el.addEventListener('pointermove', onMove);
+    el.addEventListener('pointerup', onUp);
+    el.addEventListener('pointercancel', onUp);
+    el.addEventListener('lostpointercapture', onUp);
+    return () => {
+      el.removeEventListener('pointerdown', onDown);
+      el.removeEventListener('pointermove', onMove);
+      el.removeEventListener('pointerup', onUp);
+      el.removeEventListener('pointercancel', onUp);
+      el.removeEventListener('lostpointercapture', onUp);
+    };
+  }, []);
 
   const onDoubleClick = (e) => {
     e.stopPropagation();
-    const { edgeId: eid, wpIndex: i, setEdges: se } = state.current;
-    se((eds) => eds.map((ed) => {
-      if (ed.id !== eid) return ed;
-      const wps = (ed.data?.waypoints ?? []).filter((_, j) => j !== i);
+    const s = state.current;
+    s.setEdges((eds) => eds.map((ed) => {
+      if (ed.id !== s.edgeId) return ed;
+      const wps = (ed.data?.waypoints ?? []).filter((_, j) => j !== s.wpIndex);
       return { ...ed, data: { ...(ed.data ?? {}), waypoints: wps } };
     }));
   };
@@ -315,45 +386,6 @@ function orthogonalLeg(from, to, entryAxis, forceExitAxis) {
   return { points: [from, elbow, to], exitAxis: exit };
 }
 
-function arcLength(points) {
-  let total = 0;
-  for (let i = 1; i < points.length; i++) {
-    total += Math.abs(points[i].x - points[i - 1].x) +
-             Math.abs(points[i].y - points[i - 1].y);
-  }
-  return total;
-}
-
-function arcMidpoint(points) {
-  const total = arcLength(points);
-  const target = total / 2;
-  let acc = 0;
-  for (let i = 1; i < points.length; i++) {
-    const a = points[i - 1];
-    const b = points[i];
-    const segLen = Math.abs(b.x - a.x) + Math.abs(b.y - a.y);
-    if (acc + segLen >= target) {
-      const t = segLen === 0 ? 0 : (target - acc) / segLen;
-      return {
-        x: a.x + (b.x - a.x) * t,
-        y: a.y + (b.y - a.y) * t,
-        horizontal: a.y === b.y,
-      };
-    }
-    acc += segLen;
-  }
-  const last = points[points.length - 1];
-  return { x: last.x, y: last.y, horizontal: true };
-}
-
-function polylineLength(points) {
-  return arcLength(points);
-}
-
-// Decode a handle id of the form "s-i" where s ∈ {t,r,b,l} and i is
-// the zero-based index along that side. Handle positions are rendered
-// in grid-aligned px so the edge endpoint lands on the exact pixel as
-// the handle dot.
 function anchorFromHandle(node, handleId) {
   if (!node || !handleId) return null;
   const [side, idxStr] = handleId.split('-');
@@ -410,8 +442,6 @@ function stubOut(a) {
   }
 }
 
-// Collapse collinear runs: b is redundant when a, b, c share a row
-// or a column.
 function simplify(points) {
   if (points.length <= 2) return points;
   const out = [points[0]];

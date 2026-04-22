@@ -1477,15 +1477,9 @@ html, body, #root {
   opacity: 0.35;
   transition: opacity 0.12s, background 0.12s;
 }
-.edge-waypoint.h { cursor: ns-resize; }
-.edge-waypoint.v { cursor: ew-resize; }
-.edge-waypoint:hover,
-.edge-waypoint--active { opacity: 1; }
-.edge-waypoint:hover { background: var(--accent); }
 .edge-waypoint:active { cursor: grabbing; }
-/* Existing waypoint = filled square so it reads as "a thing you
-   placed" rather than "an invitation to create". Cursor is a move
-   cursor because there's no one axis to suggest. */
+/* Existing waypoint: filled square. Drag it to move, double-click
+   to remove. */
 .edge-waypoint--placed {
   background: var(--accent);
   opacity: 0.85;
@@ -1516,19 +1510,6 @@ html, body, #root {
 .handle-grid > div > input {
   width: 60px;
   margin: 0;
-}
-
-.edge-size-chip {
-  position: absolute;
-  pointer-events: none;
-  background: var(--floating-bg);
-  border: 1px solid var(--border);
-  color: var(--muted);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 10.5px;
-  padding: 1px 6px;
-  border-radius: 4px;
-  white-space: nowrap;
 }
 
 .btn.small {
