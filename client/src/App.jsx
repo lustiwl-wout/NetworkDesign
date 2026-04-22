@@ -217,7 +217,6 @@ function Editor({ me }) {
           edges: JSON.parse(JSON.stringify(loadedEdges)),
           name: d.name,
         };
-        setSaveState('saved');
       } catch (e) {
         console.error('Failed to auto-load design:', e);
       }
@@ -405,7 +404,6 @@ function Editor({ me }) {
     setNodes([]);
     setEdges([]);
     lastSavedRef.current = { nodes: [], edges: [], name: 'Untitled design' };
-    setSaveState('idle');
     setSelectedNode(null);
     setSelectedEdge(null);
   };
@@ -423,9 +421,8 @@ function Editor({ me }) {
 
   // Autosave. Every edit schedules a silent save 1.5 s later; the
   // timer resets on every change so rapid edits coalesce into one
-  // network call. A `saveState` drives the status chip in the
-  // topbar so the user always knows where they stand.
-  const [saveState, setSaveState] = useState('idle'); // 'idle' | 'dirty' | 'saving' | 'saved' | 'error'
+  // network call. No UI chip — saves run silently; errors still
+  // surface via the toast so the user knows if something broke.
   const lastSavedRef = useRef(null);
   const saveTimerRef = useRef(null);
   const nameRef = useRef(name);
@@ -448,7 +445,6 @@ function Editor({ me }) {
     if (!isDirty()) return;
     const graph = { nodes: nodesRef.current, edges: edgesRef.current };
     const nm = nameRef.current;
-    setSaveState('saving');
     try {
       let d;
       if (currentIdRef.current) {
@@ -462,9 +458,7 @@ function Editor({ me }) {
         edges: JSON.parse(JSON.stringify(edgesRef.current)),
         name: nm,
       };
-      setSaveState('saved');
     } catch (e) {
-      setSaveState('error');
       flash(`Autosave failed: ${e.message}`);
     }
   }, [canSave, isDirty]);
@@ -474,7 +468,6 @@ function Editor({ me }) {
     if (!canSave) return;
     if (lastSavedRef.current === null) return; // waiting for initial load
     if (!isDirty()) return;
-    setSaveState('dirty');
     clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => { doSave(); }, 1500);
     return () => clearTimeout(saveTimerRef.current);
@@ -800,7 +793,6 @@ function Editor({ me }) {
         <button className="btn secondary" onClick={() => setPresent(true)} title="Enter presentation mode (Esc to exit)">
           Present
         </button>
-        {canSave && <SaveStatus state={saveState} />}
         {canSave && currentId && (
           <button className="btn danger" onClick={deleteDesign}>Delete</button>
         )}
@@ -1293,17 +1285,6 @@ function EdgeInspector({ edge, view = 'management', edgeKinds = [], onChange, on
   );
 }
 
-function SaveStatus({ state }) {
-  const map = {
-    idle:   { label: 'Autosave',          cls: 'save-status muted' },
-    dirty:  { label: 'Unsaved…',          cls: 'save-status dirty' },
-    saving: { label: 'Saving…',           cls: 'save-status saving' },
-    saved:  { label: 'Saved',             cls: 'save-status saved' },
-    error:  { label: 'Save failed',       cls: 'save-status error' },
-  };
-  const m = map[state] ?? map.idle;
-  return <span className={m.cls} title="Changes save automatically">{m.label}</span>;
-}
 
 const THEMES = ['dark', 'light', 'professional'];
 const THEME_ICON = { dark: '🌙', light: '☀︎', professional: '💼' };

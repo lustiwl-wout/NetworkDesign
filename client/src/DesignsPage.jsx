@@ -69,9 +69,10 @@ export default function DesignsPage({ me }) {
               Guest mode lets you build and export PNGs, but you need an
               account to save designs between sessions.
             </p>
-            <a className="btn" href="/login">Sign in</a>
-            <div style={{ height: 8 }} />
-            <a className="btn secondary" href="/">Back to editor</a>
+            <div className="empty-actions">
+              <a className="btn" href="/login">Sign in</a>
+              <a className="btn secondary" href="/">Back to editor</a>
+            </div>
           </div>
         )}
         {me && !loading && filtered.length === 0 && (

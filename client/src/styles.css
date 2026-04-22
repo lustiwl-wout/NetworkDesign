@@ -149,14 +149,12 @@ html, body, #root {
 }
 
 /* Uniform topbar action buttons — same min-width, height, and font
-   weight across New / Designs / Export / Present / status chip /
-   Delete / Admin / profile, so the chrome reads as a tidy row.
-   Weight explicitly set here so <button> and <a class="btn"> don't
-   pick up different user-agent defaults, and the save-status chip
-   sits at the same visual density as its button siblings. */
+   weight across New / Designs / Export / Present / Delete / Admin /
+   profile, so the chrome reads as a tidy row. Weight set here so
+   <button> and <a class="btn"> don't pick up different user-agent
+   defaults. */
 .topbar .btn:not(.theme-btn),
-.topbar a.btn,
-.topbar .save-status {
+.topbar a.btn {
   box-sizing: border-box;
   min-width: 104px;
   height: 32px;
@@ -304,27 +302,6 @@ html, body, #root {
   font-size: 15px;
   line-height: 1;
 }
-
-/* Autosave status chip — sits where the old Save button did. */
-.save-status {
-  display: inline-flex;
-  align-items: center;
-  padding: 4px 10px;
-  border-radius: 6px;
-  border: 1px solid var(--border);
-  background: var(--panel-2);
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  min-width: 78px;
-  justify-content: center;
-  white-space: nowrap;
-}
-.save-status.dirty  { color: var(--accent); border-color: var(--accent); }
-.save-status.saving { color: var(--accent); border-color: var(--accent); opacity: 0.75; }
-.save-status.saved  { color: var(--risk-l); border-color: var(--risk-l); }
-.save-status.error  { color: var(--danger); border-color: var(--danger); }
 
 .view-switch {
   display: inline-flex;
@@ -872,6 +849,11 @@ html, body, #root {
 .empty-state h2 {
   font-size: 16px;
   margin: 0 0 8px;
+}
+.empty-actions {
+  display: inline-flex;
+  gap: 16px;
+  margin-top: 14px;
 }
 
 /* Auth pages */
