@@ -86,7 +86,8 @@ function renderGuide(g, i) {
 
 // ---- Guide computation ----
 
-const TOL = 1; // flow-space px; we already snap to 10 px so 1 is plenty
+const TOL = 1;         // edge/centre alignment: grid snap makes this exact
+const SPACING_TOL = 3; // equal spacing: small slack for manually-placed nodes
 
 // Build the guide primitives for the dragged node against every
 // other node. Caller passes every visible node (including the one
@@ -161,35 +162,19 @@ export function computeGuides(draggedId, nodes, overrides = null) {
     }
   }
 
-  // Equal-spacing indicators. Look at "rows" (others that overlap a
-  // vertically) and "columns" (others that overlap a horizontally).
+  // Equal-spacing indicators. Build the "row" (everything whose
+  // vertical range overlaps the dragged node) and "column" (horizontal
+  // range overlaps), sort by position, and walk the gaps. When the
+  // gap on either side of the dragged node matches, annotate the
+  // chain — not just the two immediate neighbours — so e.g. four
+  // VLANs in a row all light up when evenly distributed.
   const sameRow = others.filter((b) => overlap(a.t, a.b, b.t, b.b));
   const sameCol = others.filter((b) => overlap(a.l, a.r, b.l, b.r));
 
-  // Horizontal spacing: nearest other on left vs right of dragged.
-  const left  = closest(sameRow.filter((b) => b.r <= a.l), (b) => a.l - b.r);
-  const right = closest(sameRow.filter((b) => b.l >= a.r), (b) => b.l - a.r);
-  if (left && right) {
-    const gL = a.l - left.r;
-    const gR = right.l - a.r;
-    if (gL > 0 && gR > 0 && Math.abs(gL - gR) <= TOL) {
-      const y = a.cy;
-      out.push({ kind: 'gap-h', x1: left.r, x2: a.l, y });
-      out.push({ kind: 'gap-h', x1: a.r,    x2: right.l, y });
-    }
-  }
+  // Horizontal spacing.
+  annotateChainH(a, sameRow, out);
   // Vertical spacing.
-  const above = closest(sameCol.filter((b) => b.b <= a.t), (b) => a.t - b.b);
-  const below = closest(sameCol.filter((b) => b.t >= a.b), (b) => b.t - a.b);
-  if (above && below) {
-    const gA = a.t - above.b;
-    const gB = below.t - a.b;
-    if (gA > 0 && gB > 0 && Math.abs(gA - gB) <= TOL) {
-      const x = a.cx;
-      out.push({ kind: 'gap-v', y1: above.b, y2: a.t, x });
-      out.push({ kind: 'gap-v', y1: a.b,    y2: below.t, x });
-    }
-  }
+  annotateChainV(a, sameCol, out);
 
   // Dedupe — the edge-cross-product above can produce duplicates for
   // perfectly aligned rectangles (e.g. same-size nodes).
@@ -261,12 +246,67 @@ function overlap(a1, a2, b1, b2) {
   return a1 < b2 && b1 < a2;
 }
 
-function closest(items, distFn) {
-  let best = null;
-  let bestD = Infinity;
-  for (const it of items) {
-    const d = distFn(it);
-    if (d >= 0 && d < bestD) { best = it; bestD = d; }
+// Horizontal chain: sort dragged + row by left edge, walk adjacent
+// gaps. Annotate the pair containing the dragged node if its gap
+// matches the neighbour's gap on the other side. Also extend through
+// further neighbours as long as their gaps match too (so a four-in-a-
+// row evenly-spaced layout lights up the whole row, not just the pair
+// bracketing the dragged node).
+function annotateChainH(dragged, row, out) {
+  const items = [...row, dragged].sort((p, q) => p.l - q.l);
+  const idx = items.indexOf(dragged);
+  if (idx < 0) return;
+  const gapAt = (i) => items[i + 1].l - items[i].r;
+  const have = (i) => i >= 0 && i + 1 < items.length;
+  // Gaps on either side of the dragged item.
+  const prev = have(idx - 1) ? gapAt(idx - 1) : null;
+  const next = have(idx)     ? gapAt(idx)     : null;
+  if (prev == null || next == null) return;
+  if (prev <= 0 || next <= 0) return;
+  if (Math.abs(prev - next) > SPACING_TOL) return;
+  // Annotate both immediate gaps + any contiguous same-gap pairs.
+  const target = (prev + next) / 2;
+  const pushGap = (i) => {
+    const A = items[i], B = items[i + 1];
+    const y = (A.cy + B.cy) / 2;
+    out.push({ kind: 'gap-h', x1: A.r, x2: B.l, y });
+  };
+  // Walk left while gap ≈ target.
+  for (let i = idx - 1; i >= 0; i--) {
+    if (Math.abs(gapAt(i) - target) > SPACING_TOL) break;
+    pushGap(i);
   }
-  return best;
+  // Walk right.
+  for (let i = idx; i + 1 < items.length; i++) {
+    if (Math.abs(gapAt(i) - target) > SPACING_TOL) break;
+    pushGap(i);
+  }
 }
+
+function annotateChainV(dragged, col, out) {
+  const items = [...col, dragged].sort((p, q) => p.t - q.t);
+  const idx = items.indexOf(dragged);
+  if (idx < 0) return;
+  const gapAt = (i) => items[i + 1].t - items[i].b;
+  const have = (i) => i >= 0 && i + 1 < items.length;
+  const prev = have(idx - 1) ? gapAt(idx - 1) : null;
+  const next = have(idx)     ? gapAt(idx)     : null;
+  if (prev == null || next == null) return;
+  if (prev <= 0 || next <= 0) return;
+  if (Math.abs(prev - next) > SPACING_TOL) return;
+  const target = (prev + next) / 2;
+  const pushGap = (i) => {
+    const A = items[i], B = items[i + 1];
+    const x = (A.cx + B.cx) / 2;
+    out.push({ kind: 'gap-v', y1: A.b, y2: B.t, x });
+  };
+  for (let i = idx - 1; i >= 0; i--) {
+    if (Math.abs(gapAt(i) - target) > SPACING_TOL) break;
+    pushGap(i);
+  }
+  for (let i = idx; i + 1 < items.length; i++) {
+    if (Math.abs(gapAt(i) - target) > SPACING_TOL) break;
+    pushGap(i);
+  }
+}
+
