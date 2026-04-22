@@ -759,7 +759,7 @@ function Editor({ me }) {
         <a className="btn secondary" href="/designs">Designs</a>
         <div className="menu">
           <button className="btn secondary" onClick={() => setExportOpen((v) => !v)}>
-            Export PNG ▾
+            Export PNG
           </button>
           {exportOpen && (
             <div className="menu-pop" style={{ minWidth: 260 }} onMouseDown={(e) => e.stopPropagation()}>
@@ -798,14 +798,14 @@ function Editor({ me }) {
           )}
         </div>
         <button className="btn secondary" onClick={() => setPresent(true)} title="Enter presentation mode (Esc to exit)">
-          ▶ Present
+          Present
         </button>
         {canSave && <SaveStatus state={saveState} />}
         {canSave && currentId && (
           <button className="btn danger" onClick={deleteDesign}>Delete</button>
         )}
         {isAdmin && (
-          <a className="btn secondary" href="/admin" title="Admin portal">⚙︎ Admin</a>
+          <a className="btn secondary" href="/admin" title="Admin portal">Admin</a>
         )}
         {me ? (
           <a className="btn secondary" href="/profile" title={me.email}>

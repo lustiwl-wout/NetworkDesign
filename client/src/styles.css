@@ -111,6 +111,13 @@ html.theme-professional .zone-header {
 /* --- Grid --------------------------------------------------------- */
 html.theme-professional .react-flow__background { opacity: 0.4; }
 
+/* The view switch's "active" pill uses --accent, which in
+   Professional is a very dark navy. Dark text on dark navy is
+   unreadable, so we force the pill to read white-on-navy here. */
+html.theme-professional .view-switch button.active {
+  color: #ffffff;
+}
+
 * { box-sizing: border-box; }
 
 html, body, #root {
@@ -186,6 +193,7 @@ html, body, #root {
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
+  text-decoration: none;
 }
 .btn:hover { background: var(--accent-2); color: white; }
 .btn.secondary {
