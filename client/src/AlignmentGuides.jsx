@@ -246,67 +246,78 @@ function overlap(a1, a2, b1, b2) {
   return a1 < b2 && b1 < a2;
 }
 
-// Horizontal chain: sort dragged + row by left edge, walk adjacent
-// gaps. Annotate the pair containing the dragged node if its gap
-// matches the neighbour's gap on the other side. Also extend through
-// further neighbours as long as their gaps match too (so a four-in-a-
-// row evenly-spaced layout lights up the whole row, not just the pair
-// bracketing the dragged node).
+// Horizontal chain: sort dragged + row by left edge, compute every
+// adjacent gap, then annotate every contiguous run of equal-sized
+// gaps that touches the dragged node. Works whether the dragged node
+// is in the middle of the chain or at either end.
 function annotateChainH(dragged, row, out) {
-  const items = [...row, dragged].sort((p, q) => p.l - q.l);
-  const idx = items.indexOf(dragged);
-  if (idx < 0) return;
-  const gapAt = (i) => items[i + 1].l - items[i].r;
-  const have = (i) => i >= 0 && i + 1 < items.length;
-  // Gaps on either side of the dragged item.
-  const prev = have(idx - 1) ? gapAt(idx - 1) : null;
-  const next = have(idx)     ? gapAt(idx)     : null;
-  if (prev == null || next == null) return;
-  if (prev <= 0 || next <= 0) return;
-  if (Math.abs(prev - next) > SPACING_TOL) return;
-  // Annotate both immediate gaps + any contiguous same-gap pairs.
-  const target = (prev + next) / 2;
-  const pushGap = (i) => {
-    const A = items[i], B = items[i + 1];
-    const y = (A.cy + B.cy) / 2;
-    out.push({ kind: 'gap-h', x1: A.r, x2: B.l, y });
-  };
-  // Walk left while gap ≈ target.
-  for (let i = idx - 1; i >= 0; i--) {
-    if (Math.abs(gapAt(i) - target) > SPACING_TOL) break;
-    pushGap(i);
-  }
-  // Walk right.
-  for (let i = idx; i + 1 < items.length; i++) {
-    if (Math.abs(gapAt(i) - target) > SPACING_TOL) break;
-    pushGap(i);
-  }
+  annotateChain(
+    dragged,
+    row,
+    (p) => p.l,
+    (a, b) => b.l - a.r,
+    (a, b) => ({ kind: 'gap-h', x1: a.r, x2: b.l, y: (a.cy + b.cy) / 2 }),
+    out,
+  );
 }
 
 function annotateChainV(dragged, col, out) {
-  const items = [...col, dragged].sort((p, q) => p.t - q.t);
+  annotateChain(
+    dragged,
+    col,
+    (p) => p.t,
+    (a, b) => b.t - a.b,
+    (a, b) => ({ kind: 'gap-v', y1: a.b, y2: b.t, x: (a.cx + b.cx) / 2 }),
+    out,
+  );
+}
+
+function annotateChain(dragged, siblings, sortKey, gapOf, makeMarker, out) {
+  if (!siblings.length) return;
+  const items = [...siblings, dragged].sort((p, q) => sortKey(p) - sortKey(q));
   const idx = items.indexOf(dragged);
   if (idx < 0) return;
-  const gapAt = (i) => items[i + 1].t - items[i].b;
-  const have = (i) => i >= 0 && i + 1 < items.length;
-  const prev = have(idx - 1) ? gapAt(idx - 1) : null;
-  const next = have(idx)     ? gapAt(idx)     : null;
-  if (prev == null || next == null) return;
-  if (prev <= 0 || next <= 0) return;
-  if (Math.abs(prev - next) > SPACING_TOL) return;
-  const target = (prev + next) / 2;
-  const pushGap = (i) => {
-    const A = items[i], B = items[i + 1];
-    const x = (A.cx + B.cx) / 2;
-    out.push({ kind: 'gap-v', y1: A.b, y2: B.t, x });
-  };
-  for (let i = idx - 1; i >= 0; i--) {
-    if (Math.abs(gapAt(i) - target) > SPACING_TOL) break;
-    pushGap(i);
+  if (items.length < 3) return; // 2 items = 1 gap, no "even" to detect
+
+  // All adjacent gap sizes.
+  const gaps = [];
+  for (let i = 0; i + 1 < items.length; i++) {
+    gaps.push(gapOf(items[i], items[i + 1]));
   }
-  for (let i = idx; i + 1 < items.length; i++) {
-    if (Math.abs(gapAt(i) - target) > SPACING_TOL) break;
-    pushGap(i);
+
+  // Gap indices that actually touch the dragged node. If dragged is
+  // at an end there's only one; if middle there are two.
+  const touching = [];
+  if (idx - 1 >= 0)          touching.push(idx - 1);
+  if (idx < gaps.length)     touching.push(idx);
+  if (touching.length === 0) return;
+  for (const gi of touching) if (gaps[gi] <= 0) return; // overlapping nodes
+
+  // If dragged is in the middle, its two gaps must themselves match
+  // for the row to count as "even"; otherwise the target is obvious.
+  if (touching.length === 2 && Math.abs(gaps[touching[0]] - gaps[touching[1]]) > SPACING_TOL) return;
+  const target = gaps[touching[0]];
+
+  // Expand outward, gathering contiguous gaps that match the target.
+  const show = new Set(touching);
+  let l = Math.min(...touching);
+  for (let i = l - 1; i >= 0; i--) {
+    if (Math.abs(gaps[i] - target) > SPACING_TOL) break;
+    show.add(i);
+  }
+  let r = Math.max(...touching);
+  for (let i = r + 1; i < gaps.length; i++) {
+    if (Math.abs(gaps[i] - target) > SPACING_TOL) break;
+    show.add(i);
+  }
+
+  // Require at least one extra matching gap beyond the touching
+  // ones, OR that the touching pair already agrees (middle drag) —
+  // otherwise a single adjacent gap isn't evidence of evenness.
+  if (touching.length === 1 && show.size < 2) return;
+
+  for (const gi of show) {
+    out.push(makeMarker(items[gi], items[gi + 1]));
   }
 }
 
