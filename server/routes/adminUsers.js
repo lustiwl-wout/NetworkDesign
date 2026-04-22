@@ -39,8 +39,8 @@ adminUsersRouter.post('/', async (req, res, next) => {
     const hash = await bcrypt.hash(password, 10);
     try {
       const { rows } = await pool.query(
-        `INSERT INTO users (email, password_hash, display_name, role)
-         VALUES ($1, $2, $3, $4) RETURNING *`,
+        `INSERT INTO users (email, password_hash, display_name, role, must_change_password)
+         VALUES ($1, $2, $3, $4, TRUE) RETURNING *`,
         [email.toLowerCase(), hash, displayName ?? null, role]
       );
       res.status(201).json(toPublic(rows[0]));
@@ -101,8 +101,11 @@ adminUsersRouter.post('/:id/reset-password', async (req, res, next) => {
       return res.status(400).json({ error: 'password must be at least 8 characters' });
     }
     const hash = await bcrypt.hash(newPassword, 10);
+    // Admin-set passwords are temporary; force the user to choose
+    // a new one on their next login.
     const { rowCount } = await pool.query(
-      `UPDATE users SET password_hash = $1 WHERE id = $2`, [hash, id]
+      `UPDATE users SET password_hash = $1, must_change_password = TRUE WHERE id = $2`,
+      [hash, id]
     );
     if (!rowCount) return res.status(404).json({ error: 'not found' });
     await pool.query(`DELETE FROM sessions WHERE user_id = $1`, [id]);

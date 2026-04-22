@@ -31,7 +31,8 @@ export async function loadSession(id) {
   if (!id) return null;
   const { rows } = await pool.query(
     `SELECT s.id, s.user_id, s.mfa_verified, s.expires_at,
-            u.email, u.display_name, u.role, u.totp_enabled, u.default_view
+            u.email, u.display_name, u.role, u.totp_enabled,
+            u.default_view, u.must_change_password
        FROM sessions s
        JOIN users u ON u.id = s.user_id
       WHERE s.id = $1 AND s.expires_at > now()`,
@@ -50,6 +51,7 @@ export async function loadSession(id) {
       role: r.role,
       totpEnabled: r.totp_enabled,
       defaultView: r.default_view,
+      mustChangePassword: !!r.must_change_password,
     },
     mfaVerified: r.mfa_verified,
   };

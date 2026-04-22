@@ -24,6 +24,7 @@ function publicUser(r) {
     role: r.role,
     totpEnabled: r.totp_enabled,
     defaultView: r.default_view,
+    mustChangePassword: !!r.must_change_password,
   };
 }
 
@@ -167,7 +168,12 @@ authRouter.post('/change-password', requireAuth, async (req, res, next) => {
     const ok = rows[0] && (await bcrypt.compare(currentPassword, rows[0].password_hash));
     if (!ok) return res.status(401).json({ error: 'current password incorrect' });
     const hash = await bcrypt.hash(newPassword, 10);
-    await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2', [hash, req.auth.user.id]);
+    // Clear the must-change flag once the user has chosen their own
+    // password — the admin-seeded temporary is retired.
+    await pool.query(
+      'UPDATE users SET password_hash = $1, must_change_password = FALSE WHERE id = $2',
+      [hash, req.auth.user.id]
+    );
     res.json({ ok: true });
   } catch (err) { next(err); }
 });

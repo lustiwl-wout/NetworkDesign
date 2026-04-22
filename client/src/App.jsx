@@ -1337,6 +1337,12 @@ function Root() {
     return <LoginPage initialMfa onAuthed={refreshMe} />;
   }
 
+  // If the password was seeded by an admin, force the user to
+  // choose their own before they can do anything else.
+  if (me.user && me.user.mustChangePassword) {
+    return <ForceChangePassword me={me.user} onDone={refreshMe} />;
+  }
+
   // Explicit /login URL — show the sign-in page (unless already signed in).
   if (path.startsWith('/login')) {
     if (me.user) { window.location.href = '/'; return null; }
@@ -1379,6 +1385,56 @@ function Forbidden({ me }) {
           Your account ({me.email}) doesn't have access to this page.
         </p>
         <a className="btn" href="/">← Back to editor</a>
+      </div>
+    </div>
+  );
+}
+
+function ForceChangePassword({ me, onDone }) {
+  const [current, setCurrent] = useState('');
+  const [next, setNext] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setErr('');
+    if (next.length < 8) { setErr('New password must be at least 8 characters.'); return; }
+    if (next !== confirm) { setErr('New passwords don\'t match.'); return; }
+    if (next === current) { setErr('Pick a password different from the temporary one.'); return; }
+    setBusy(true);
+    try {
+      await authApi.changePassword({ currentPassword: current, newPassword: next });
+      onDone?.();
+    } catch (e2) {
+      setErr(e2.message || 'Could not update password.');
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <div className="auth-shell">
+      <div className="auth-card">
+        <h1>Set a new password</h1>
+        <p className="hint">
+          Your account ({me.email}) is using a temporary password an administrator set. Pick your own before continuing.
+        </p>
+        <form onSubmit={submit} className="form">
+          <label>Temporary password</label>
+          <input type="password" autoFocus required value={current} onChange={(e) => setCurrent(e.target.value)} />
+
+          <label>New password</label>
+          <input type="password" required minLength={8} value={next} onChange={(e) => setNext(e.target.value)} />
+
+          <label>Confirm new password</label>
+          <input type="password" required minLength={8} value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+
+          {err && <div className="admin-error">{err}</div>}
+
+          <div className="form-actions">
+            <button className="btn" type="submit" disabled={busy}>{busy ? '…' : 'Save password'}</button>
+          </div>
+        </form>
       </div>
     </div>
   );

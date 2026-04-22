@@ -11,10 +11,12 @@ CREATE TABLE IF NOT EXISTS users (
   default_view   TEXT NOT NULL DEFAULT 'management',
   totp_secret    TEXT,
   totp_enabled   BOOLEAN NOT NULL DEFAULT FALSE,
+  must_change_password BOOLEAN NOT NULL DEFAULT FALSE,
   created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 ALTER TABLE users ADD COLUMN IF NOT EXISTS default_view TEXT NOT NULL DEFAULT 'management';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN NOT NULL DEFAULT FALSE;
 
 CREATE TABLE IF NOT EXISTS sessions (
   id            TEXT PRIMARY KEY,
