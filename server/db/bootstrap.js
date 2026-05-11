@@ -227,7 +227,8 @@ const SEED_ZONES = [
   { key: 'dmz',        label: 'DMZ',                           color: '#f59e0b', sort_order: 20, description: 'Perimeter network for externally exposed services.' },
   { key: 'cloud',      label: 'Cloud',                         color: '#8b5cf6', sort_order: 30, description: 'Public cloud region (AWS/Azure/GCP).' },
   { key: 'ire',        label: 'Isolated Recovery Environment', color: '#22c55e', sort_order: 40, description: 'Air-gapped vault for cyber-resilient recovery.' },
-  { key: 'airgap',     label: 'Air Gap',                       color: '#64748b', sort_order: 50, description: 'Controlled, typically one-way transfer channel.' },
+  // Air gap removed from zone catalog — it's a barrier, not a
+  // containment zone. Mark one on a diagram with an annotation.
   { key: 'branch',     label: 'Branch',                        color: '#06b6d4', sort_order: 60, description: 'Remote office or site.' },
   { key: 'management', label: 'Management',                    color: '#94a3b8', sort_order: 70, description: 'Out-of-band administrative plane.' },
   { key: 'generic',    label: 'Zone',                          color: '#38bdf8', sort_order: 80, description: 'Generic labeled container.' },
