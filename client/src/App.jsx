@@ -92,6 +92,10 @@ function findContainingZone(nodes, pos, excludeId = null) {
   let bestArea = Infinity;
   for (const n of nodes) {
     if (n.type !== 'zone' || skip.has(n.id)) continue;
+    // Air-gap zones are barriers, not containers — never accept
+    // children. Skip them so drops fall through to the surrounding
+    // canvas / parent zone.
+    if (n.data?.typeKey === 'airgap') continue;
     const w = n.width  ?? n.style?.width  ?? 0;
     const h = n.height ?? n.style?.height ?? 0;
     if (!w || !h) continue;

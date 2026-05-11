@@ -25,6 +25,7 @@ function sideCount(data, sideKey) {
 export default function ZoneNode({ id, data, selected }) {
   const color = data?.color ?? DEFAULT_COLOR;
   const label = data?.label ?? 'Zone';
+  const isAirGap = data?.typeKey === 'airgap';
   const ref = useRef(null);
   const [size, setSize] = useState({ w: 0, h: 0 });
   const updateNodeInternals = useUpdateNodeInternals();
@@ -49,6 +50,35 @@ export default function ZoneNode({ id, data, selected }) {
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
+
+  // Air gap renders as a hatched barrier strip with a centred label.
+  // It deliberately accepts no children — see findContainingZone in
+  // App.jsx which skips airgap zones during reparent / drop.
+  if (isAirGap) {
+    return (
+      <div
+        ref={ref}
+        className={`zone-node zone-node--airgap${selected ? ' selected' : ''}`}
+        style={{
+          '--ag-color': color,
+          background: `repeating-linear-gradient(135deg, transparent 0 8px, ${color}55 8px 10px), ${color}10`,
+          border: `1.5px dashed ${color}`,
+          boxShadow: selected ? `0 0 0 2px ${color}66` : undefined,
+        }}
+      >
+        <NodeResizer
+          isVisible={selected}
+          minWidth={120}
+          minHeight={28}
+          lineStyle={{ borderColor: color }}
+          handleStyle={{ background: color, width: 8, height: 8 }}
+        />
+        <div className="zone-airgap-label" style={{ color }}>
+          {(label || 'Air Gap').toUpperCase()}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
