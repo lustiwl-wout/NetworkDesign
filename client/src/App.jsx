@@ -398,11 +398,17 @@ function Editor({ me }) {
         const relPos = parentAbs
           ? { x: position.x - parentAbs.x, y: position.y - parentAbs.y }
           : position;
+        // Air gap drops as a strip regardless of what the catalog
+        // row says — existing installs may have it seeded at the
+        // generic 360 × 240, which is wrong for a barrier.
+        const isAirGap = z.key === 'airgap';
+        const w = isAirGap ? 480 : z.defaultWidth;
+        const h = isAirGap ? 40  : z.defaultHeight;
         const newZone = {
           id,
           type: 'zone',
           position: relPos,
-          style: { width: z.defaultWidth, height: z.defaultHeight },
+          style: { width: w, height: h },
           zIndex: -1,
           ...(parent ? { parentNode: parent.id } : {}),
           data: { typeKey: z.key, label: z.label, color: z.color, sublabel: '' },
@@ -927,7 +933,7 @@ function Editor({ me }) {
       <aside className="palette">
         <h2>Zones</h2>
         {zoneTypes.length === 0 && <div className="hint small">Loading…</div>}
-        {zoneTypes.map((z) => (
+        {zoneTypes.filter((z) => z.key !== 'airgap').map((z) => (
           <div
             key={z.key}
             className="palette-item zone-chip"
@@ -940,6 +946,29 @@ function Editor({ me }) {
             <span>{z.label}</span>
           </div>
         ))}
+
+        {/* Barriers — air gap is technically stored as a zone-type
+            row for plumbing simplicity, but it renders as a hatched
+            strip and accepts no children, so it lives in its own
+            section. */}
+        {zoneTypes.some((z) => z.key === 'airgap') && (
+          <>
+            <h2>Barriers</h2>
+            {zoneTypes.filter((z) => z.key === 'airgap').map((z) => (
+              <div
+                key={z.key}
+                className="palette-item zone-chip"
+                draggable
+                onDragStart={(e) => onPaletteDragStart(e, 'zone', z.key)}
+                style={{ borderColor: z.color }}
+                title={z.description}
+              >
+                <span className="zone-swatch zone-swatch--airgap" style={{ color: z.color }} />
+                <span>{z.label}</span>
+              </div>
+            ))}
+          </>
+        )}
 
         <h2>Devices</h2>
         {deviceTypes.length === 0 && <div className="hint small">Loading…</div>}

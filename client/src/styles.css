@@ -300,6 +300,18 @@ html, body, #root {
   display: inline-block;
   flex-shrink: 0;
 }
+/* Barrier swatch in the palette — hatched strip instead of solid
+   fill so the user can see at a glance it's not a containment
+   zone. The hatch colour uses the border colour set inline. */
+.zone-swatch--airgap {
+  width: 16px; height: 12px;
+  background: repeating-linear-gradient(135deg,
+    transparent 0 3px,
+    currentColor 3px 4px);
+  color: currentColor;
+  border: 1px solid;
+  border-radius: 2px;
+}
 
 .toggle-row {
   display: flex;
