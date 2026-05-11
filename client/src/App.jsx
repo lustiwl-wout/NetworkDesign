@@ -998,6 +998,12 @@ function Editor({ me }) {
           defaultEdgeOptions={{ type: 'smart' }}
           snapToGrid
           snapGrid={[10, 10]}
+          // Rubber-band selection: left-drag on empty pane draws a
+          // selection box; middle / right-drag still pans. Cmd/Ctrl-
+          // click adds individual nodes to the selection.
+          selectionOnDrag
+          selectionMode="partial"
+          panOnDrag={[1, 2]}
         >
           <Background gap={16} size={1} color="var(--grid)" />
           <Controls />
